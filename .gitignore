@@ -1,4 +1,10 @@
+# Build directory
 build
+
+# Symlinked build files
+*.so
+*.pyi
 
 # LSP files
 .clangd
+

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-from QuadconnBindings import QuadconnBindings as qb
+import QuadconnBindings as qb
 
 def link_line_segment(length, angle, xstart=0, ystart=0):
     xend = xstart + length * np.cos(angle)

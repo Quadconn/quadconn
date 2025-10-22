@@ -59,7 +59,24 @@ target_link_libraries(${PROJECT_BINDINGS}
 add_custom_command(
     TARGET ${PROJECT_BINDINGS}
     POST_BUILD
-    COMMAND "${Python_EXECUTABLE}" -m pybind11_stubgen -o . ${PROJECT_BINDINGS}
-    COMMENT "Generating .pyi for ${PROJECT_BINDINGS}"
-    VERBATIM
+
+    COMMAND ${CMAKE_COMMAND} -E echo "Generating .pyi for ${PROJECT_BINDINGS}"
+    COMMAND "${Python_EXECUTABLE}" -m pybind11_stubgen
+            -o ${CMAKE_CURRENT_BINARY_DIR} ${PROJECT_BINDINGS}
+
+    COMMAND ${CMAKE_COMMAND} -E echo "Symlinking binding files to scripts"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink 
+            ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_BINDINGS}.pyi
+            ${CMAKE_SOURCE_DIR}/scripts/${PROJECT_BINDINGS}.pyi
+    COMMAND ${CMAKE_COMMAND} -E create_symlink 
+            ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_BINDINGS}.pyi
+            ${CMAKE_SOURCE_DIR}/sim/${PROJECT_BINDINGS}.pyi
+
+    COMMAND ${CMAKE_COMMAND} -E echo "Symlinking binding files to sim"
+    COMMAND ${CMAKE_COMMAND} -E create_symlink 
+            ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
+            ${CMAKE_SOURCE_DIR}/scripts/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>    VERBATIM
+    COMMAND ${CMAKE_COMMAND} -E create_symlink 
+            ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
+            ${CMAKE_SOURCE_DIR}/sim/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>    VERBATIM
 )

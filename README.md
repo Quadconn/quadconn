@@ -6,10 +6,10 @@ git clone --recurse-submodules https://github.com/Quadconn/control.git
 ```
 
 ## Requirements
-python v3.X.X (TBD) 
-    - pybind11_stubgen 
-cmake 
-g++ 
+- python v3.X.X (TBD)
+    - pybind11_stubgen
+- cmake
+- g++
 
 ## Building Source Code
 ```

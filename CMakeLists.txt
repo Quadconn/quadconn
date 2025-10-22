@@ -75,8 +75,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E echo "Symlinking binding files to sim"
     COMMAND ${CMAKE_COMMAND} -E create_symlink 
             ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
-            ${CMAKE_SOURCE_DIR}/scripts/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>    VERBATIM
+            ${CMAKE_SOURCE_DIR}/scripts/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
     COMMAND ${CMAKE_COMMAND} -E create_symlink 
             ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
-            ${CMAKE_SOURCE_DIR}/sim/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>    VERBATIM
+            ${CMAKE_SOURCE_DIR}/sim/$<TARGET_FILE_NAME:${PROJECT_BINDINGS}>
+    VERBATIM
 )

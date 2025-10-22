@@ -56,6 +56,9 @@ target_link_libraries(${PROJECT_BINDINGS}
         ${CONTROL_LIB}
 )
 
+# Generates python .pyi file from the pybind11 bindings for text editor code
+# completion. Also creates symlinks inside scripts/ and sim/ to the .so bindings 
+# file and .pyi file for use in python scripts.
 add_custom_command(
     TARGET ${PROJECT_BINDINGS}
     POST_BUILD

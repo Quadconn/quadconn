@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.23)
 
+# -------------------------------
+#           Quadconn 
+# -------------------------------
 project(Quadconn LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -12,7 +15,10 @@ target_sources(${PROJECT_NAME}
     src/main.cpp
 )
 
-set(CONTROL_LIB ${PROJECT_NAME}Control)
+# -------------------------------
+#          Controls Lib
+# -------------------------------
+set(CONTROL_LIB "${PROJECT_NAME}Control")
 add_library(${CONTROL_LIB})
 
 target_sources(${CONTROL_LIB}
@@ -34,11 +40,13 @@ target_link_libraries(${PROJECT_NAME}
         ${CONTROL_LIB}
 )
 
-
+# -------------------------------
+#           pybind11 
+# -------------------------------
 set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 CONFIG REQUIRED)
 
-set(PROJECT_BINDINGS ${PROJECT_NAME}Bindings)
+set(PROJECT_BINDINGS "${PROJECT_NAME}Bindings")
 pybind11_add_module(${PROJECT_BINDINGS}
     src/Bindings.cpp
 )
@@ -46,4 +54,12 @@ pybind11_add_module(${PROJECT_BINDINGS}
 target_link_libraries(${PROJECT_BINDINGS}
     PRIVATE
         ${CONTROL_LIB}
+)
+
+add_custom_command(
+    TARGET ${PROJECT_BINDINGS}
+    POST_BUILD
+    COMMAND "${Python_EXECUTABLE}" -m pybind11_stubgen -o . ${PROJECT_BINDINGS}
+    COMMENT "Generating .pyi for ${PROJECT_BINDINGS}"
+    VERBATIM
 )

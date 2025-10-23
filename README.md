@@ -9,6 +9,7 @@ git clone --recurse-submodules https://github.com/Quadconn/control.git
 - python v3.X.X (TBD)
     - pybind11_stubgen
     - matplotlib
+    - pybullet
 - cmake
 - g++
 

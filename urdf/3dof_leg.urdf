@@ -13,12 +13,15 @@
   <!-- End-effector -->
   <link name="foot"/>
 
+  <!-- 'effort' and 'velocity' parameters of 'limit' are ignored -->
+
   <!-- Joint 1 -->
   <joint name="joint1" type="revolute">
     <parent link="base"/>
     <child  link="link1"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 2 -->
@@ -27,6 +30,7 @@
     <child  link="link2"/>
     <origin xyz="0 0 -0.2" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 3 -->
@@ -35,6 +39,7 @@
     <child  link="link3"/>
     <origin xyz="0 0 -0.2" rpy="0 0 0"/>
     <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Fixed "foot" -->
@@ -45,3 +50,4 @@
   </joint>
 
 </robot>
+

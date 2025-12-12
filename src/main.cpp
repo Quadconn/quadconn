@@ -21,7 +21,7 @@ int main(int argc, char ** argv)
 
     const int JOINT_ID = 3;
     // Destination
-    const pinocchio::SE3 oMdes(Eigen::Matrix3d::Identity(), Eigen::Vector3d(1., 0., 1.));
+    const pinocchio::SE3 oMdes(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.41775, 0., 0.));
 
     Eigen::VectorXd q = pinocchio::neutral(model);
     //Eigen::VectorXd q = randomConfiguration(model);

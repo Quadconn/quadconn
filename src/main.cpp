@@ -17,7 +17,10 @@ int main(int argc, char ** argv)
 
     pinocchio::Data data(model);
 
+    // TODO DR: Load the visual robot model (Add compiler switch to not include in physical test)
+
     const int JOINT_ID = 3;
+    // Destination
     const pinocchio::SE3 oMdes(Eigen::Matrix3d::Identity(), Eigen::Vector3d(1., 0., 1.));
 
     Eigen::VectorXd q = pinocchio::neutral(model);
@@ -61,6 +64,8 @@ int main(int argc, char ** argv)
         q = pinocchio::integrate(model, q, v * DT);
         if (!(i % 10))
             std::cout << i << ": error = " << err.transpose() << std::endl;
+
+        // TODO DR: Visualize the models movement (Add compiler switch to not include in physical test)
     }
 
     if (success)

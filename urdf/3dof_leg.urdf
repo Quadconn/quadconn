@@ -1,9 +1,6 @@
 <?xml version="1.0"?>
 <robot name="leg3dof">
 
-  <!-- Root link -->
-  <link name="base"/>
-
   <!-- First link -->
   <link name="link1"/>
   <!-- Second link -->
@@ -17,36 +14,38 @@
 
   <!-- Joint 1 -->
   <joint name="joint1" type="revolute">
-    <parent link="base"/>
-    <child  link="link1"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
+    <parent link="link1"/>
+    <child  link="link2"/>
+
+    <origin xyz="0.2235 0.04241 0" rpy="0 0 0"/>
+
+    <axis xyz="1 0 0"/>
+
     <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 2 -->
   <joint name="joint2" type="revolute">
-    <parent link="link1"/>
-    <child  link="link2"/>
-    <origin xyz="0 0 -0.2" rpy="0 0 0"/>
+    <parent link="link2"/>
+    <child  link="link3"/>
+
+    <origin xyz="0.19425 0.069 0" rpy="0 0 0"/>
+
     <axis xyz="0 1 0"/>
+
     <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 3 -->
   <joint name="joint3" type="revolute">
-    <parent link="link2"/>
-    <child  link="link3"/>
-    <origin xyz="0 0 -0.2" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
-  </joint>
-
-  <!-- Fixed "foot" -->
-  <joint name="foot_fixed" type="fixed">
     <parent link="link3"/>
     <child  link="foot"/>
-    <origin xyz="0 0 -0.2"/>
+
+    <origin xyz="0.140 0 0" rpy="0 0 0"/>
+
+    <axis xyz="0 1 0"/>
+
+    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
 </robot>

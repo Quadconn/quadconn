@@ -20,6 +20,8 @@ int main(int argc, char ** argv)
     // TODO DR: Load the visual robot model (Add compiler switch to not include in physical test)
 
     const int JOINT_ID = 3;
+
+
     // Destination
     const pinocchio::SE3 oMdes(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.41775, 0., 0.));
 

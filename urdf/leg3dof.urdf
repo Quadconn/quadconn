@@ -22,6 +22,10 @@
     This is necessary because visual boxes are positioned about their center.
   -->
 
+
+  <!-- Link Definitions -->
+
+
   <!-- First link -->
   <link name="link1">
     <visual>
@@ -87,42 +91,38 @@
     </visual>
   </link>
 
-  <!-- 'effort' and 'velocity' parameters of 'limit' are ignored (supposedly ie ChatGPT said so)-->
+
+  <!-- Joint Definitions -->
+
 
   <!-- Joint 1 -->
-  <joint name="joint1" type="revolute">
+  <joint name="joint1" type="continuous">
     <parent link="link1"/>
     <child  link="link2"/>
 
     <origin xyz="0 0 0" rpy="0 0 0"/>
 
     <axis xyz="1 0 0"/>
-
-    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 2 -->
-  <joint name="joint2" type="revolute">
+  <joint name="joint2" type="continuous">
     <parent link="link2"/>
     <child  link="link3"/>
 
     <origin xyz="0.2235 0.04241 0" rpy="0 0 0"/>
 
     <axis xyz="0 1 0"/>
-
-    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Joint 3 -->
-  <joint name="joint3" type="revolute">
+  <joint name="joint3" type="continuous">
     <parent link="link3"/>
     <child  link="foot"/>
 
     <origin xyz="0.19425 0.069 0" rpy="0 0 0"/>
 
     <axis xyz="0 1 0"/>
-
-    <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
   </joint>
 
   <!-- Fixed joint that represents the final length of last link -->

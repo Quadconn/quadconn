@@ -11,7 +11,7 @@ from pinocchio.visualize import GepettoVisualizer
 urdf_model_path = Path(__file__).parent.parent / "urdf/leg3dof.urdf"
  
 model, collision_model, visual_model = pin.buildModelsFromUrdf(
-    urdf_model_path, None, pin.JointModelFreeFlyer()
+    urdf_model_path, None, None 
 )
 
 viz = GepettoVisualizer(model, collision_model, visual_model)

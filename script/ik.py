@@ -1,7 +1,10 @@
 from pathlib import Path
+import sys
 from sys import argv
+import time
  
 import pinocchio as pin
+from pinocchio.visualize import GepettoVisualizer
 import numpy as np
 from numpy.linalg import pinv, norm
 
@@ -14,6 +17,7 @@ EPS = 1e-2
 # to the target. It is simply a quick ideal case check
 def is_reachable(target):
     # Constants defining leg lengths and offset in y direction
+    # TODO: Change this so that values are taken from pinocchio model (not hardcoded)
     L1 = 0.2235
     L2 = 0.19425
     L3 = 0.140
@@ -42,11 +46,45 @@ def is_reachable(target):
     return (abs(L2 - L3) - EPS) <= d <= (L2 + L3 + EPS)
 
 ############# URDF Model Loading / Initialization ###############
- 
+
 urdf_file = Path(__file__).parent.parent / "urdf/leg3dof.urdf"
  
 # Load the urdf model
-model = pin.buildModelFromUrdf(urdf_file)
+model = None
+viz = None
+
+if (len(argv) > 1 and argv[1] == "-v"):
+    print("Visualization Enabled")
+
+    model, collision_model, visual_model = pin.buildModelsFromUrdf(
+        urdf_file, None, None 
+    )
+
+    viz = GepettoVisualizer(model, collision_model, visual_model)
+     
+    # Initialize the viewer.
+    try:
+        viz.initViewer()
+    except ImportError as err:
+        print(
+            "Error while initializing the viewer. "
+            "It seems you should install gepetto-viewer"
+        )
+        print(err)
+        sys.exit(0)
+     
+    try:
+        viz.loadViewerModel("pinocchio")
+    except AttributeError as err:
+        print(
+            "Error while loading the viewer model. "
+            "It seems you should start gepetto-viewer"
+        )
+        print(err)
+        sys.exit(0)
+else:
+    model = pin.buildModelFromUrdf(urdf_file)
+
 print(f"Model Name: {model.name}")
 print(f"\tnq: {model.nq}") 
 print(f"\tnv: {model.nv}\n") 
@@ -60,6 +98,10 @@ q = pin.neutral(model)
 # Perform the forward kinematics over the frames in the kinematic tree, 
 # updating 'data' in the process
 pin.framesForwardKinematics(model, data, q)
+
+if viz: 
+    viz.display(q)
+    time.sleep(3)
 
 # Get the frame index/id of the robots toe frame
 TOE_ID = model.getFrameId("toe")
@@ -75,7 +117,7 @@ print(f"Neutral Toe position: {toe_position}")
 
 # Define a target with a slight offset in -x from where the toe is positioned
 #target = toe_position + np.array([-0.05, 0.0, -0.05])
-target = np.array([0.2235, 0.11141, 0.33425])
+target = np.array([0.2235, 0.11141 - 0.15, -(0.33425 - 0.1)])
 print(f"Target position: {target}\n")
 
 print(f"The Target {"IS" if is_reachable(target) else "IS NOT"} Reachable")
@@ -104,6 +146,10 @@ while (True):
     # Perform forward kinematics on robots frames and compute jacobians
     pin.framesForwardKinematics(model, data, q)
     pin.computeJointJacobians(model, data, q)
+
+    if viz:
+        viz.display(q)
+        time.sleep(0.01)
 
     # Current placement of toe frame
     oMtoe = data.oMf[TOE_ID]
@@ -141,5 +187,5 @@ else:
 
 # Compute final configuration and corresponding toe frame position
 toe_position = data.oMf[TOE_ID].translation
-print(f"Final Toe position: {toe_position}")
+print(f"Final Toe Position: {toe_position}")
 print(f"Final Error: {norm(toe_position - target)}")

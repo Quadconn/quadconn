@@ -6,14 +6,51 @@ import numpy as np
 from numpy.linalg import pinv, norm
 
 
+# Minimum Acceptable Distance Error (meters from target)
+EPS = 1e-2
+
+# Verify if target is within the reachable workspace of 3-DOF leg
+# NOTE: This does not guarantee that the IK solver will converge 
+# to the target. It is simply a quick ideal case check
+def is_reachable(target):
+    # Constants defining leg lengths and offset in y direction
+    L1 = 0.2235
+    L2 = 0.19425
+    L3 = 0.140
+    DY = 0.04241 + 0.069
+    # Origin of joint 2
+    O2 = np.array([L1, DY, 0])
+
+    # Vector to target wrt joint 2 (change of reference frame from 
+    # robot origin to joint 2
+    r = target - O2
+
+    # Distance of target from the x-axis of rotation about joint 1
+    rho = np.sqrt(r[1]**2 + r[2]**2)
+
+    # By using the x and rho value we can now operate on the plane (x, rho)
+    # to determine reachability
+
+    # Hypotenuse of triangle formed by x position and rho position.
+    # This is essentially the distance from the origin of joint 2 to
+    # the target position
+    d = np.sqrt(r[0]**2 + rho**2)
+
+    # Check if distance is within the spherical shell shaped workspace
+    # NOTE: This does not take into account joint limits ie. assumes there
+    # are none
+    return (abs(L2 - L3) - EPS) <= d <= (L2 + L3 + EPS)
+
 ############# URDF Model Loading / Initialization ###############
  
 urdf_file = Path(__file__).parent.parent / "urdf/leg3dof.urdf"
  
 # Load the urdf model
 model = pin.buildModelFromUrdf(urdf_file)
-print(f"Model Name: {model.name}\n")
- 
+print(f"Model Name: {model.name}")
+print(f"\tnq: {model.nq}") 
+print(f"\tnv: {model.nv}\n") 
+
 # Create data required by the algorithms
 data = model.createData()
  
@@ -41,6 +78,7 @@ print(f"Neutral Toe position: {toe_position}")
 target = np.array([0.2235, 0.11141, 0.33425])
 print(f"Target position: {target}\n")
 
+print(f"The Target {"IS" if is_reachable(target) else "IS NOT"} Reachable")
 
 ############# Control Loop Constants ###############
 
@@ -49,9 +87,6 @@ DT = 1e-2
 
 # Proportional Control Gain
 Kp = 1.0
-
-# Minimum Acceptable Distance Error (meters from target)
-EPS = 1e-2
 
 # Maximum Control Loop Iterations
 MAX_IT = 1000
@@ -77,7 +112,7 @@ while (True):
     oJtoe3 = pin.computeFrameJacobian(model, data, q, TOE_ID, pin.LOCAL_WORLD_ALIGNED)[:3,:]
 
     # Distance error vector from current toe position to target
-    oToTarget = oMtoe.translation - target
+    oToTarget = target - oMtoe.translation
 
     # Check if error is acceptable
     if norm(oToTarget) < EPS:
@@ -86,7 +121,7 @@ while (True):
 
     # Control law by least square 
     #   Compute joint velocity that would take the toe frame to the target (in what unit time?)
-    vq = -Kp * pinv(oJtoe3) @ oToTarget
+    vq = Kp * pinv(oJtoe3) @ oToTarget
 
     # Integrate the joint velocity over the time step and add computed configuration step 
     # to previous configuration q

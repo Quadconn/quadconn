@@ -117,75 +117,80 @@ print(f"Neutral Toe position: {toe_position}")
 
 # Define a target with a slight offset in -x from where the toe is positioned
 #target = toe_position + np.array([-0.05, 0.0, -0.05])
-target = np.array([0.2235, 0.11141 - 0.15, -(0.33425 - 0.1)])
-print(f"Target position: {target}\n")
+targets = [np.array([0.2235, 0.11141, -(0.33425)]), 
+           np.array([0.2235, 0.11141 - 0.15, -(0.33425 - 0.1)]),
+           np.array([0.2235 + 0.1, 0.11141 - 0.15, -(0.33425 - 0.1)]),
+           np.array([0.2235 + 0.15, 0.11141 - 0.15, -(0.33425 - 0.1)]),
+           np.array([0.2235 + 0.2, 0.11141 - 0.15, -(0.33425 - 0.1)]),
+           ]
 
-print(f"The Target {"IS" if is_reachable(target) else "IS NOT"} Reachable")
-
-############# Control Loop Constants ###############
-
-# Integration Time Step
-DT = 1e-2
-
-# Proportional Control Gain
-Kp = 1.0
-
-# Maximum Control Loop Iterations
-MAX_IT = 1000
+for target in targets:
+    print(f"Target position: {target}\n")
+    print(f"The Target {"IS" if is_reachable(target) else "IS NOT"} Reachable")
 
 
 ############# Control Loop ###############
-i = 0
-success = False
-while (True):
 
-    if (i > MAX_IT):
-        print(f"Maximum Iterations Reached ({i})")
-        break
+def ik(model, data, q, target, eps):
+    # Integration Time Step
+    DT = 1e-2
+    # Proportional Control Gain
+    Kp = 1.0
+    # Maximum Control Loop Iterations
+    MAX_IT = 1000
 
-    # Perform forward kinematics on robots frames and compute jacobians
-    pin.framesForwardKinematics(model, data, q)
-    pin.computeJointJacobians(model, data, q)
+    i = 0
+    success = False
+    while (True):
+        if (i > MAX_IT):
+            print(f"Maximum Iterations Reached ({i})")
+            break
 
-    if viz:
-        viz.display(q)
-        time.sleep(0.01)
+        # Perform forward kinematics on robots frames and compute jacobians
+        pin.framesForwardKinematics(model, data, q)
+        pin.computeJointJacobians(model, data, q)
 
-    # Current placement of toe frame
-    oMtoe = data.oMf[TOE_ID]
+        # Current placement of toe frame
+        oMtoe = data.oMf[TOE_ID]
 
-    # 3D jacobian (only linear/translation components)
-    oJtoe3 = pin.computeFrameJacobian(model, data, q, TOE_ID, pin.LOCAL_WORLD_ALIGNED)[:3,:]
+        # 3D jacobian (only linear/translation components)
+        oJtoe3 = pin.computeFrameJacobian(model, data, q, TOE_ID, pin.LOCAL_WORLD_ALIGNED)[:3,:]
 
-    # Distance error vector from current toe position to target
-    oToTarget = target - oMtoe.translation
+        # Distance error vector from current toe position to target
+        oToTarget = target - oMtoe.translation
 
-    # Check if error is acceptable
-    if norm(oToTarget) < EPS:
-        success = True
-        break
+        # Check if error is acceptable
+        if norm(oToTarget) < EPS:
+            success = True
+            break
 
-    # Control law by least square 
-    #   Compute joint velocity that would take the toe frame to the target (in what unit time?)
-    vq = Kp * pinv(oJtoe3) @ oToTarget
+        # Control law by least square 
+        #   Compute joint velocity that would take the toe frame to the target (in what unit time?)
+        vq = Kp * pinv(oJtoe3) @ oToTarget
 
-    # Integrate the joint velocity over the time step and add computed configuration step 
-    # to previous configuration q
-    q = pin.integrate(model, q, vq * DT)
+        # Integrate the joint velocity over the time step and add computed configuration step 
+        # to previous configuration q
+        q = pin.integrate(model, q, vq * DT)
 
-    #print(f"Error: {norm(oToTarget)}")
+        #print(f"Error: {norm(oToTarget)}")
 
-    i += 1
+        i += 1
 
+    return q, success, i
 
 ############# Results ###############
-
-if success:
-    print(f"Convergence Acheived! (Iterations = {i})")
-else:
-    print(f"Convergence Failed.")
+for target in targets:
+    q, success, iterations = ik(model, data, q, target, EPS)
+    if success:
+        if (viz):
+            viz.display(q)
+            time.sleep(1)
+        print(f"Convergence Acheived! (Iterations = {iterations})")
+    else:
+        print(f"Convergence Failed.")
 
 # Compute final configuration and corresponding toe frame position
-toe_position = data.oMf[TOE_ID].translation
-print(f"Final Toe Position: {toe_position}")
-print(f"Final Error: {norm(toe_position - target)}")
+    toe_position = data.oMf[TOE_ID].translation
+    print(f"Final Toe Position: {toe_position}")
+    print(f"Final Error: {norm(target - toe_position)}")
+    print(f"Final Configuration q: {q}")

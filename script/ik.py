@@ -10,7 +10,7 @@ from numpy.linalg import pinv, norm
 
 
 # Minimum Acceptable Distance Error (meters from target)
-EPS = 1e-2
+EPS = 1e-3
 
 # Verify if target is within the reachable workspace of 3-DOF leg
 # NOTE: This does not guarantee that the IK solver will converge 
@@ -93,7 +93,9 @@ print(f"\tnv: {model.nv}\n")
 data = model.createData()
  
 # Sample the neutral configuration (All joints set to 0 degrees)
-q = pin.neutral(model)
+# TODO: Change this to a known configuration that is not neutral or random.
+# Starting at neutral places leg at a singularity where IK will fail to converge
+q = pin.randomConfiguration(model)
  
 # Perform the forward kinematics over the frames in the kinematic tree, 
 # updating 'data' in the process
@@ -117,12 +119,9 @@ print(f"Neutral Toe position: {toe_position}")
 
 # Define a target with a slight offset in -x from where the toe is positioned
 #target = toe_position + np.array([-0.05, 0.0, -0.05])
-targets = [np.array([0.2235, 0.11141, -(0.33425)]), 
-           np.array([0.2235, 0.11141 - 0.15, -(0.33425 - 0.1)]),
-           np.array([0.2235 + 0.1, 0.11141 - 0.15, -(0.33425 - 0.1)]),
-           np.array([0.2235 + 0.15, 0.11141 - 0.15, -(0.33425 - 0.1)]),
-           np.array([0.2235 + 0.2, 0.11141 - 0.15, -(0.33425 - 0.1)]),
-           ]
+targets = [
+        np.array([0.2235 + 0.19425 + 0.140 - 0.140 - 0.140 - 0.0001, 0.04241 + 0.069, 0.0])
+]
 
 for target in targets:
     print(f"Target position: {target}\n")

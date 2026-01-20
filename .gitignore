@@ -8,3 +8,5 @@ build
 # LSP files
 .clangd
 
+# Python 
+.venv

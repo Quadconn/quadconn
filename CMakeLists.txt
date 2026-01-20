@@ -17,7 +17,11 @@ find_package(pinocchio REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 # --- Executable ---
-add_executable(quadconn src/main.cpp)
+add_executable(quadconn)
+
+target_sources(quadconn PRIVATE
+    src/main.cpp
+)
 
 # --- Linking (Modern CMake way) ---
 target_link_libraries(quadconn

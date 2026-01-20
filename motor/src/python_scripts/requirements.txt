@@ -1,0 +1,4 @@
+evdev==1.9.2
+hid==1.0.8
+hidapi==0.15.0
+iceoryx2==0.8.0

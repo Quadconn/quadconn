@@ -27,7 +27,7 @@ double get_time() {
 int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
-    constexpr bb::Duration UPDATE_RATE = bb::Duration::from_millis(20);
+    constexpr bb::Duration UPDATE_RATE = bb::Duration::from_micros(10000);
 
     // Setup arguments and transport
     std::vector<std::string> args;
@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     moteus::Controller::DefaultArgProcess(args);
     // Raw transport to send batch
     auto transport = moteus::Controller::MakeSingletonTransport({});
-    // Setup controllers
+    // Setup controllers (remember to add other CAN_IDs)
     std::vector<int> motor_ids = {3};
     std::vector<std::shared_ptr<moteus::Controller>> controllers;
     for (int id : motor_ids) {
@@ -63,30 +63,29 @@ int main(int argc, char** argv) {
     std::map<int, moteus::Query::Result> servo_data;
 
     // Execution loop
-    std::cout << "waiting for data\n";
-    while (node.wait(UPDATE_RATE).has_value()) {
-        // 1. Receive the Result
+    std::cout << "starting motor loop\n";
+    const auto start = get_time();
+    while (node.wait(UPDATE_RATE).has_value()) { 
+        command_frames.clear();
+        // attempt to receive value every 10 ms
         auto receive_result = subscriber.receive();
 
-        // 2. Handle IPC Errors (Fix for 'has_error')
+        
         if (!receive_result.has_value()) {
             std::cerr << "IPC Error: " << static_cast<int>(receive_result.error()) << "\n";
             continue; 
         }
 
-        // 3. Extract the Option (Move semantics!)
-        // We use std::move to transfer ownership out of the result
         auto sample_opt = std::move(receive_result.value());
-
-        // 4. Check if we actually received a sample (Fix for Deleted Copy)
+        // Check if we actually received a sample 
         if (sample_opt.has_value()) {
             
             // Take a REFERENCE to the sample to avoid copying (Zero-Copy)
             const auto& sample = sample_opt.value();
             
-            // std::cout << "Received gamepad_values: A{" << sample.payload() << std::endl;
+            // std::cout << "Received gamepad_values: " << sample.payload() << std::endl;
 
-            // 5. Access Payload (Fix for '->')
+            // Access Payload (Fix for '->')
             if (sample.payload().A) {
                 // std::cout << "Received A:" << sample.payload().A << "\n";
                 angles = {(2 * M_PI), (2 * M_PI), (2 * M_PI)};
@@ -96,16 +95,11 @@ int main(int argc, char** argv) {
                 // std::cout << "Received lx value:" << sample.payload().lx << "\n";
                 angles = {sample.payload().lx * (20 * M_PI), sample.payload().lx * (20 * M_PI), sample.payload().lx * (20 * M_PI)};
             }
-
-
         }
-                // ... Motor control logic continues ...
+                // encoder & send to motor
         for (size_t i = 0; i < controllers.size(); ++i) {
             moteus::PositionMode::Command cmd;
-            // std::cout << "sending value of " << angles[i] << "\n";
-            cmd.position = static_cast<int>(rad2turns(angles[i]));
-            
-            
+            cmd.position = rad2turns(angles[i]);
             cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
             command_frames.push_back(controllers[i]->MakePosition(cmd));
         }
@@ -119,9 +113,11 @@ int main(int argc, char** argv) {
             const auto r = pair.second;
             std::cout << "position: " << r.position << ", velocity: " << r.velocity 
                     << ", torque: " << r.torque << ", fault: " << r.fault
-                    << ", voltage: " << r.voltage << ", mode: " << static_cast<int>(r.mode) << "\n";
-            // ::usleep(10000); 
+                    << ", voltage: " << r.voltage << ", mode: " << static_cast<int>(r.mode) 
+                    << ", trajectory_completed: "<< r.trajectory_complete << "\n";
+            
         }
+        // ::usleep(10000); 
     }    
     // End safely
     for (auto& c : controllers) { c->SetStop(); }

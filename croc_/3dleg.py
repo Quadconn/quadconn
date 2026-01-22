@@ -5,9 +5,10 @@ import meshcat.geometry as mg
 import pathlib
 import matplotlib.pyplot as plt
 from IPython.display import display
+
 # provide path to urdf file for pinocchio
 urdf_model_path = pathlib.Path(
-    '1leg.urdf')
+    '/home/quadconn/quadconn/croc_/1leg.urdf')
 robot = pinocchio.robot_wrapper.RobotWrapper.BuildFromURDF(
     str(urdf_model_path))
 # prints model using pinocchio

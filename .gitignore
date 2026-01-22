@@ -10,4 +10,6 @@ build
 
 # Python 
 .venv
-__pycache__
+
+# I am a gui guy
+.vscode

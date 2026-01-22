@@ -111,10 +111,10 @@ int main(int argc, char** argv) {
 
         for (const auto& pair : servo_data) {
             const auto r = pair.second;
-            std::cout << "position: " << r.position << ", velocity: " << r.velocity 
-                    << ", torque: " << r.torque << ", fault: " << r.fault
-                    << ", voltage: " << r.voltage << ", mode: " << static_cast<int>(r.mode) 
-                    << ", trajectory_completed: "<< r.trajectory_complete << "\n";
+            // std::cout << "position: " << r.position << ", velocity: " << r.velocity 
+            //         << ", torque: " << r.torque << ", fault: " << r.fault
+            //         << ", voltage: " << r.voltage << ", mode: " << static_cast<int>(r.mode) 
+            //         << ", trajectory_completed: "<< r.trajectory_complete << "\n";
             
         }
         // ::usleep(10000); 

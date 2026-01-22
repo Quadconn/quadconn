@@ -10,3 +10,6 @@ build
 
 # Python 
 .venv
+
+# I am a gui guy
+.vscode

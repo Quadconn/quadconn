@@ -11,12 +11,21 @@ cmake -S . -B target/release -DCMAKE_BUILD_TYPE=Release
 cmake --build target/release
 sudo cmake --install target/release --prefix /usr/local
 ```
-To have python bindings, run the following code:
+To have Python bindings, run the following code:
 ```bash
 pip install iceoryx2
 ```
-highly reccomend creating in virtual environment!
+Highly recommend creating in a virtual environment!
 
-# TODO:
-1. Create separate executables in CMakeLists.txt for IPC
-2. Create 
+# How to run the code
+The CMakeFile currently creates individual executables for each node. Run them
+once they are created in the build directory:
+
+```bash
+cmake -B build
+cmake --build build
+cd build
+./Executable_of_choice
+```
+In the future, there will be run.sh scripts on the top directory to execute all code
+at once, but running them individually allows each terminal to display debug info. 

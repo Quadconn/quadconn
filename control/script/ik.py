@@ -92,10 +92,8 @@ print(f"\tnv: {model.nv}\n")
 # Create data required by the algorithms
 data = model.createData()
  
-# Sample the neutral configuration (All joints set to 0 degrees)
-# TODO: Change this to a known configuration that is not neutral or random.
-# Starting at neutral places leg at a singularity where IK will fail to converge
-q = pin.randomConfiguration(model)
+# An explicit initial configuration of the robot 
+q = np.array([np.deg2rad(0), np.deg2rad(-135), np.deg2rad(90)])
  
 # Perform the forward kinematics over the frames in the kinematic tree, 
 # updating 'data' in the process

@@ -16,7 +16,7 @@
 
 // Convert radians to turns
 double rad2turns(double radians) {
-    return radians / (2.0 * M_PI);
+    return 9*(radians / (2.0 * M_PI));
 }
 
 double get_time() {
@@ -90,11 +90,11 @@ int main(int argc, char** argv) {
                       sample.payload().theta2,
                       sample.payload().theta3};
         }
-                // encoder & send to motor
+                // encode & send to motor
         for (size_t i = 0; i < controllers.size(); ++i) {
             moteus::PositionMode::Command cmd;
             cmd.position = rad2turns(angles[i]);
-            cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+            cmd.velocity = 2; // std::numeric_limits<double>::quiet_NaN(); 
             command_frames.push_back(controllers[i]->MakePosition(cmd));
         }
         std::vector<moteus::CanFdFrame> replies;
@@ -111,6 +111,8 @@ int main(int argc, char** argv) {
                     << ", trajectory_completed: "<< r.trajectory_complete << "\n";
             
         }
+
+        
         // ::usleep(10000); 
     }
         

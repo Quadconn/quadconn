@@ -28,13 +28,14 @@ for t in targets:
     print(f"Target: {t}")
 
     success, q = quad.leg_ik(t)
-
+    
     if (success):
         quadViz.display(quad)
         time.sleep(1)
         print(f"Final Toe Position = {quad.get_toe_position()}")
         print("Convergence Acheived!")
         print(f"q = {q}")
+
     else:
         print("Convergence Failed!")
     print()

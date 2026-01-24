@@ -20,7 +20,7 @@ find_package(Eigen3 REQUIRED)
 add_executable(quadconn)
 
 target_sources(quadconn PRIVATE
-    src/main.cpp
+    src/cpp/main.cpp
 )
 
 # --- Linking (Modern CMake way) ---

@@ -1,5 +1,10 @@
 # Quadconn
 
+## Run With Visualization
+```
+gepetto-gui & python main.py
+```
+
 ## Developer Setup
 Install the following necessary conda packages into your preferred conda environment:
 ```

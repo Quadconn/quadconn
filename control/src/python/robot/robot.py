@@ -19,8 +19,9 @@ class Robot:
     # Initial robot configuration
     _INITIAL_Q = np.array([np.deg2rad(0), np.deg2rad(-135), np.deg2rad(90)])
 
-    def __init__(self, urdf_path: pathlib.Path, q0: np.ndarray | None = None):
-        self.model = pin.buildModelFromUrdf(urdf_path)
+    def __init__(self, urdf: pathlib.Path, q0: np.ndarray | None = None):
+        self.urdf = urdf
+        self.model = pin.buildModelFromUrdf(urdf)
         self.data  = self.model.createData()
         self.q     = q0 if q0 is not None else self._INITIAL_Q 
         self.toe_id = self.model.getFrameId("toe")
@@ -67,8 +68,13 @@ class Robot:
         # Call before exit to ensure data is up to date
         pin.framesForwardKinematics(self.model, self.data, self.q)
 
-        return success, self.q
+        return success, self.q.copy()
 
     def get_toe_position(self) -> np.ndarray:
-        return self.data.oMf[self.toe_id].translation
+        return self.data.oMf[self.toe_id].translation.copy()
 
+    def get_urdf(self) -> pathlib.Path:
+        return self.urdf
+
+    def get_configuration(self) -> np.ndarray:
+        return self.q.copy()

@@ -1,11 +1,13 @@
 from pathlib import Path
 import numpy as np
+import time
 
-from robot import Robot
+from robot import Robot, RobotVisualizer
 
 urdf_file = Path(__file__).parent.parent.parent / "urdf/leg3dof.urdf"
 
 quad = Robot(urdf_file)
+quadViz = RobotVisualizer(quad, "quad")
 toe0 = quad.get_toe_position()
 print(f"Initial Toe Position: {toe0}\n")
 
@@ -20,12 +22,16 @@ targets = [
         toe0,
         ]
 
+quadViz.display(quad)
+time.sleep(5)
 for t in targets:
     print(f"Target: {t}")
 
     success, q = quad.leg_ik(t)
 
     if (success):
+        quadViz.display(quad)
+        time.sleep(1)
         print(f"Final Toe Position = {quad.get_toe_position()}")
         print("Convergence Acheived!")
         print(f"q = {q}")

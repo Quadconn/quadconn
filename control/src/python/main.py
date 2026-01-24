@@ -7,7 +7,7 @@ from robot import Robot, RobotVisualizer
 urdf_file = Path(__file__).parent.parent.parent / "urdf/leg3dof.urdf"
 
 quad = Robot(urdf_file)
-quadViz = RobotVisualizer(quad, "quad")
+quadViz = RobotVisualizer(quad)
 toe0 = quad.get_toe_position()
 print(f"Initial Toe Position: {toe0}\n")
 

@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
                 angles = {0, 0, 0};
             } else if (sample.payload().lx) {
                 // std::cout << "Received lx value:" << sample.payload().lx << "\n";
-                angles = {sample.payload().lx * (20 * M_PI), sample.payload().lx * (20 * M_PI), sample.payload().lx * (20 * M_PI)};
+                angles = {sample.payload().lx * (18 * M_PI), sample.payload().lx * (18 * M_PI), sample.payload().lx * (18 * M_PI)};
             }
         }
                 // encoder & send to motor

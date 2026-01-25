@@ -22,10 +22,9 @@ find_package(Eigen3 REQUIRED)
 
 # define folders within src
 set(SRC_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(MOTEUS_DIR ${SRC_ROOT}/moteus)
-set(ICEORYX_DIR ${SRC_ROOT}/iceoryx2_node)
-set(USR_DIR ${SRC_ROOT}/usr)
-set(PINO_DIR ${SRC_ROOT}/pino)
+set(MOTEUS_DIR ${SRC_ROOT}/cpp/moteus)
+set(ICEORYX_DIR ${SRC_ROOT}/cpp/iceory)
+set(USR_DIR ${SRC_ROOT}/cpp/usr)
 
 
 # Primary application entries
@@ -64,19 +63,16 @@ add_executable(sMotor_Gamepad ${SMOTORG_SOURCES} ${ICEORYX_SOURCES} ${MOTEUS_SOU
 # Modern CMake: avoid include_directories() and use target_include_directories only if needed
 target_include_directories(pInverse_Kinematics
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${USR_DIR}
 )
 
 target_include_directories(sMotor_Interface
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${USR_DIR}
 )
 
 target_include_directories(sMotor_Gamepad
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${USR_DIR}
 )
 

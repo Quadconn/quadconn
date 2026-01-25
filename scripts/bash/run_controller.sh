@@ -8,7 +8,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Paths
 EXECUTABLE="$PROJECT_ROOT/build/sMotor_Gamepad"
-PYTHON_SCRIPTS_DIR="$PROJECT_ROOT/src/python_scripts"
+PYTHON_SCRIPTS_DIR="$PROJECT_ROOT/src/python"
 VENV_DIR="$PYTHON_SCRIPTS_DIR/.venv"
 SCRIPT="$PYTHON_SCRIPTS_DIR/pController.py"
 

@@ -1,6 +1,4 @@
-# Quadconn Motor Branch
-
-
+# Quadconn 
 
 # Installing Iceoryx2
 Commands to build Cpp bindings:

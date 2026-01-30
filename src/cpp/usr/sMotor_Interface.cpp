@@ -8,6 +8,7 @@
 
 #include "moteus.h"
 #include "three_dof_theta.hpp"
+#include "motor_diagnostics.hpp"
 #include "iox2/iceoryx2.hpp"
 
 
@@ -54,6 +55,11 @@ int main(int argc, char** argv) {
                     .open_or_create()
                     .value();
     auto subscriber = service.subscriber_builder().create().value();
+    auto p_service = node.service_builder(ServiceName::create("motor_diagnostics").value())
+                    .publish_subscribe<motor_diagnostics>()
+                    .open_or_create()
+                    .value();
+    auto publisher = p_service.publisher_builder().create().value();
     /* END: BRACKET GUARD -- SUB VALUE */
 
 
@@ -105,11 +111,15 @@ int main(int argc, char** argv) {
 
         for (const auto& pair : servo_data) {
             const auto r = pair.second;
-            std::cout << "position: " << r.position << ", velocity: " << r.velocity 
-                    << ", torque: " << r.torque << ", fault: " << r.fault
-                    << ", voltage: " << r.voltage << ", mode: " << static_cast<int>(r.mode) 
-                    << ", trajectory_completed: "<< r.trajectory_complete << "\n";
             
+            auto sample = publisher.loan_uninit().value();
+            auto init_sample = 
+                sample.write_payload(
+                    motor_diagnostics{static_cast<int>(r.mode), r.fault, r.trajectory_complete,
+                    r.position, r.velocity, r.torque,
+                    r.q_current, r.d_current, r.abs_position,
+                    r.power, r.motor_temperature, r.voltage, r.temperature});
+            send(std::move(init_sample)).value();
         }
 
         

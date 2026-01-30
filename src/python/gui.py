@@ -31,13 +31,13 @@ class VideoThread(QThread):
                 self.msleep(1000) 
                 continue
 
-            print("📡 Stream connected! Feeding video...")
+            print("Stream connected! Feeding video...")
             while True:
                 ret, frame = cap.read()
                 if ret:
                     self.change_pixmap_signal.emit(frame)
                 else:
-                    print("⚠️ Stream lost. Reconnecting...")
+                    print("Stream lost. Reconnecting...")
                     cap.release()
                     break 
 
@@ -70,7 +70,7 @@ class QuadconnGUI(QWidget):
         self.video_label.setPixmap(pixmap)
 
     def closeEvent(self, event):
-        print("\n🛑 Closing Dashboard. Shutting down remote vision...")
+        print("\nClosing Dashboard. Shutting down remote vision...")
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -79,9 +79,9 @@ class QuadconnGUI(QWidget):
             
             ssh.exec_command("pkill -9 mediamtx && pkill -9 ffmpeg")
             ssh.close()
-            print("✅ Remote processes stopped. Hardware standby.")
+            print("Remote processes stopped. Hardware standby.")
         except Exception as e:
-            print(f"⚠️ Could not stop remote processes: {e}")
+            print(f"Could not stop remote processes: {e}")
         
         self.thread.terminate()
         event.accept()
@@ -94,15 +94,15 @@ def start_remote_services():
         my_key = paramiko.Ed25519Key.from_private_key_file(PRIVATE_KEY_PATH)
         ssh.connect(ROBOT_IP, username=ROBOT_USER, pkey=my_key)
 
-        print("🚀 Booting remote vision systems...")
+        print("Booting remote vision systems...")
         ssh.exec_command(f"bash -l -c '{ROBOT_SCRIPT}'")
         
         time.sleep(4) 
         ssh.close()
-        print("✅ Robot is ready. Initializing Dashboard...")
+        print("Robot is ready. Initializing Dashboard...")
         return True
     except Exception as e:
-        print(f"❌ Initialization Error: {e}")
+        print(f"Initialization Error: {e}")
         return False
 
 if __name__ == "__main__":

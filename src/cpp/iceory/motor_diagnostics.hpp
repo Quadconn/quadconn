@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <iostream>
-
+#include "moteus.h"
+// pack 12 into one struct
 
 struct motor_diagnostics {
     int mode; int fault; int trajectory_complete;
@@ -11,6 +12,17 @@ struct motor_diagnostics {
     static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics";
 };
 
+struct motor_diagnostics_array {
+    motor_diagnostics motor_d[12];
+    static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics_array";
+};
+
+inline motor_diagnostics make_diag(const mjbots::moteus::Query::Result& r) {
+    return {static_cast<int>(r.mode), r.fault, r.trajectory_complete,
+            r.position, r.velocity, r.torque,
+            r.q_current, r.d_current, r.abs_position,
+            r.power, r.motor_temperature, r.voltage, r.temperature};
+}
 
 inline auto operator<<(std::ostream& stream, const motor_diagnostics& value) -> std::ostream& {
     stream << "motor_diagnostics { "
@@ -30,3 +42,4 @@ inline auto operator<<(std::ostream& stream, const motor_diagnostics& value) -> 
            << " }";
     return stream;
 }
+

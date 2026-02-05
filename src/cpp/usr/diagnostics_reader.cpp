@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
         if (sample_opt.has_value()) {
             const auto& sample = sample_opt.value();
             
-            for (int i = 0; i < 12; i++) {
+            for (int i = 0; i < MOTOR_COUNT; i++) {
                 std::cout << "Node " << i+1 << ": position is "<< sample.payload().motor_d[i].position << std::endl; 
                 std::cout << "Node " << i+1 << ": voltage is " << sample.payload().motor_d[i].voltage  << std::endl; 
             }

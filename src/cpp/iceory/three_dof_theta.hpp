@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <iostream>
 
+
 struct three_dof_theta {
     double  theta1;
     double  theta2;

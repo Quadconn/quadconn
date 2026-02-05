@@ -1,19 +1,22 @@
 #include <cstdint>
 #include <iostream>
 #include "moteus.h"
-// pack 12 into one struct
+#define MOTOR_COUNT 12
 
 struct motor_diagnostics {
+    // mode diagnostics
     int mode; int fault; int trajectory_complete;
+    // pvt 
     double position; double velocity; double torque;
+    // current values
     double q_current; double d_current; double abs_position;
-    double power; double motor_temperature; double voltage;
-    double temperature;
+    // power diagnostics
+    double power; double motor_temperature; double voltage; double temperature;
     static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics";
 };
 
 struct motor_diagnostics_array {
-    motor_diagnostics motor_d[12];
+    motor_diagnostics motor_d[MOTOR_COUNT];
     static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics_array";
 };
 

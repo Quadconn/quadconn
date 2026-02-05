@@ -116,7 +116,7 @@ int main(int argc, char** argv) {
             int target_idx = id - 1;
 
 
-            if (target_idx >= 0 && target_idx < 12) {
+            if (target_idx >= 0 && target_idx < MOTOR_COUNT) {
                 diags.motor_d[target_idx] = make_diag(result);
             }
         }

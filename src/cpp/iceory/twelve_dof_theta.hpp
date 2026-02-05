@@ -2,35 +2,35 @@
 #include <iostream>
 
 struct twelve_dof_theta {
-    double  node1_angle;
-    double  node2_angle;
-    double  node3_angle;
-    double  node4_angle;
-    double  node5_angle;
-    double  node6_angle;
-    double  node7_angle;
-    double  node8_angle;
-    double  node9_angle;
-    double  node10_angle;
-    double  node11_angle;
-    double  node12_angle;
+    double  theta1;
+    double  theta2;
+    double  theta3;
+    double  theta4;
+    double  theta5;
+    double  theta6;
+    double  theta7;
+    double  theta8;
+    double  theta9;
+    double  theta10;
+    double  theta11;
+    double  theta12;
     static constexpr const char* IOX2_TYPE_NAME = "twelve_dof_theta";
 };
 
 inline auto operator<<(std::ostream& stream, const twelve_dof_theta& value) -> std::ostream& {
     stream << "twelve_dof_theta { "
-           << "node1: " << value.node1_angle
-           << ", node2: " << value.node2_angle
-           << ", node3: " << value.node3_angle
-           << ", node4: " << value.node4_angle
-           << ", node5: " << value.node5_angle
-           << ", node6: " << value.node6_angle
-           << ", node7: " << value.node7_angle
-           << ", node8: " << value.node8_angle
-           << ", node9: " << value.node9_angle
-           << ", node10: " << value.node10_angle
-           << ", node11: " << value.node11_angle
-           << ", node12: " << value.node12_angle
+           << "node1: " << value.theta1
+           << ", node2: " << value.theta2
+           << ", node3: " << value.theta3
+           << ", node4: " << value.theta4
+           << ", node5: " << value.theta5
+           << ", node6: " << value.theta6
+           << ", node7: " << value.theta7
+           << ", node8: " << value.theta8
+           << ", node9: " << value.theta9
+           << ", node10: " << value.theta10
+           << ", node11: " << value.theta11
+           << ", node12: " << value.theta12
            << " }";
     return stream;
 }

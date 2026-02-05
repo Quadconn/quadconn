@@ -21,34 +21,26 @@ double rad2turns(double radians) {
 int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
+
     // how often the loop pools
     constexpr bb::Duration UPDATE_RATE = bb::Duration::from_millis(10);
-
-    // Setup arguments and transport
-    std::vector<std::string> args;
-    for (int i = 0; i < argc; i++) { args.push_back(argv[i]); }
-    moteus::Controller::DefaultArgProcess(args);
-    // Raw transport to send batch
-
-    // list fdcanusbs by id (9C92 tied to 3, 1889 tied to 4)
-    auto transport = moteus::Controller::MakeSingletonTransport({});
     
-    // mapping CAN-IDs to FD-CAN
-    std::map<int, std::shared_ptr<mjbots::moteus::Fdcanusb>> id_can_mapping
-        {   {4, std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00")},
-            {3, std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00")}
-         };
+    // change usb-id depending on motor id used, map motor controller node ids to bus
+    auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
+    auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
+        {4, std::move(bus_a)},
+        {3, std::move(bus_b)}
+    };
 
+    // Initialize Controllers
     std::vector<std::shared_ptr<moteus::Controller>> controllers;
-    for (auto& pair : id_can_mapping) {
+    for (auto const& [id, bus] : id_to_bus) {
         moteus::Controller::Options options{};
-        options.id = pair.first;
-        options.transport = pair.second;
+        options.id = id;
+        options.transport = bus; 
         controllers.push_back(std::make_shared<moteus::Controller>(options));
     }
-
-    
-    
 
     // Stop everything to clear faults first
     for (auto& c : controllers) { c->SetStop(); }
@@ -60,8 +52,7 @@ int main(int argc, char** argv) {
                     .open_or_create()
                     .value();
     auto subscriber = service.subscriber_builder().create().value();
-    // pubbing motor diagnostics
-    
+    // publishing motor diagnostics
     auto p_service = node.service_builder(ServiceName::create("motor_diagnostics_array").value())
                     .publish_subscribe<motor_diagnostics_array>()
                     .open_or_create()
@@ -72,59 +63,46 @@ int main(int argc, char** argv) {
 
 
     // Prepare batch of commands
-    std::vector<moteus::CanFdFrame> command_frames;
-    std::vector<double> angles = {0.0, 0.0, 0.0};
+    std::vector<double> target_angles = {0.0, 0.0, 0.0};
     std::map<int, moteus::Query::Result> servo_data;
-    std::map<std::shared_ptr<moteus::Fdcanusb>, std::vector<moteus::CanFdFrame>> transport_batches;
+    std::map<std::shared_ptr<moteus::Fdcanusb>, std::vector<moteus::CanFdFrame>> bus_cmd;
 
     // Execution loop
     std::cout << "starting motor loop\n";
-
+    
+    // attempt to receive value every 10 ms
     while (node.wait(UPDATE_RATE).has_value()) { 
-        command_frames.clear();
-        // attempt to receive value every 10 ms
-        auto receive_result = subscriber.receive();
-
         
-        if (!receive_result.has_value()) {
-            std::cerr << "IPC Error: " << static_cast<int>(receive_result.error()) << "\n";
-            continue; 
+        // clear on new loop
+        servo_data.clear();
+        bus_cmd.clear();
+
+        auto receive_result = subscriber.receive();
+        if (receive_result.has_value()) {
+            auto sample_opt = std::move(receive_result.value());
+            if (sample_opt.has_value()) {
+                const auto& p = sample_opt.value().payload();
+                target_angles = {p.theta1, p.theta2, p.theta3};
+            }
         }
 
-        auto sample_opt = std::move(receive_result.value());
-        // Check if we actually received a sample 
-        if (sample_opt.has_value()) {
-            
-            // Take a REFERENCE to the sample to avoid copying (Zero-Copy)
-            const auto& sample = sample_opt.value();
-            
+        //  
+        
+        
 
-            // Access Payload (Fix for '->')
-            angles = {sample.payload().theta1, 
-                      sample.payload().theta2,
-                      sample.payload().theta3};
-        }
-        // Instead of a single transport->BlockingCycle call:
-
-        // 1. Group your frames by their specific transport
-        std::map<std::shared_ptr<moteus::Fdcanusb>, std::vector<moteus::CanFdFrame>> transport_batches;
 
         for (size_t i = 0; i < controllers.size(); ++i) {
             moteus::PositionMode::Command cmd;
-            cmd.position = rad2turns(angles[i]);
-            cmd.velocity = std::numeric_limits<double>::quiet_NaN();
-            command_frames.push_back(controllers[i]->MakePosition(cmd));
-            std::cout << "sending value: " << cmd.position << " to node " << controllers[i]->options().id << std::endl;
-            // ... setup cmd ...
-            
-            // Use the transport associated with THIS controller
-            auto& controller_transport = id_can_mapping[controllers[i]->options().id];
-            transport_batches[controller_transport].push_back(controllers[i]->MakePosition(cmd));
+            cmd.position = rad2turns(target_angles[i]);
+            cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+            auto frame = controllers[i]->MakePosition(cmd);
+            // first holds value of transport path, second holds value of command frame
+            bus_cmd[id_to_bus[controllers[i]->options().id]].push_back(frame);
         }
 
         std::vector<moteus::CanFdFrame> replies;
-        // 2. Execute a cycle for EACH transport
-        for (auto& [bus, frames] : transport_batches) {
+        //  Execute a cycle for EACH transport
+        for (auto& [bus, frames] : bus_cmd) {
             bus->BlockingCycle(&frames[0], frames.size(), &replies);
             
             for (const auto& frame : replies) {
@@ -133,14 +111,14 @@ int main(int argc, char** argv) {
         }   
 
 
-        // Fill a diagnostics array at runtime (zero-initialized)
-        motor_diagnostics_array diags{}; // all entries zeroed
-        int index = 0;
-        for (const auto& pair : servo_data) {
-            const auto& r = pair.second;
-            if (index >= 12) break; // safety: array has 12 entries
-            diags.motor_d[index] = make_diag(r);
-            ++index;
+        motor_diagnostics_array diags{};
+        for (auto const& [id, result] : servo_data) {
+            int target_idx = id - 1;
+
+
+            if (target_idx >= 0 && target_idx < 12) {
+                diags.motor_d[target_idx] = make_diag(result);
+            }
         }
 
         // Publish the full diagnostics array once per loop

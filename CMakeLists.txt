@@ -36,7 +36,7 @@ set(USR_DIR ${SRC_ROOT}/cpp/usr)
 set(DIAGNOSTICS_SOURCES ${USR_DIR}/diagnostics_reader.cpp)
 set(SMOTOR_SOURCES ${USR_DIR}/sMotor_Interface.cpp)
 set(CAMERA_SOURCES ${USR_DIR}/camera_stream.cpp)
-set(MOTORINIT_SOURCES ${USR_DIR}/sMotor_Interface.cpp)
+set(MOTORINIT_SOURCES ${USR_DIR}/zero_motors.cpp)
 
 # `iceoryx2_node` and `moteus` in this repository currently contain headers only.
 # If you add .cpp files there later, list them here explicitly, for example:
@@ -57,6 +57,7 @@ target_include_directories(moteus INTERFACE ${MOTEUS_DIR})
 add_executable(diagnostics_reader ${DIAGNOSTICS_SOURCES})
 add_executable(sMotor_Interface ${SMOTOR_SOURCES})
 add_executable(camera_stream ${CAMERA_SOURCES})
+add_executable(zero_motors ${MOTORINIT_SOURCES})
 
 # --- Include directories ---
 
@@ -84,3 +85,6 @@ target_link_libraries(camera_stream
         ${COMMON_LIBS}
         PkgConfig::GST  # This automatically handles includes AND libs
 )
+
+target_include_directories(zero_motors PRIVATE ${USR_DIR})
+target_link_libraries(zero_motors PRIVATE ${COMMON_LIBS})

@@ -10,7 +10,7 @@ int main(int argc, char** argv) {
     auto node = NodeBuilder().create<ServiceType::Ipc>().value();
     
     auto s_service = node.service_builder(ServiceName::create("motor_diagnostics_array").value())
-                    .publish_subscribe<motor_diagnostics_array>()
+                    .publish_subscribe<MotorDiagnosticsArray>()
                     .open_or_create()
                     .value();
     auto subscriber = s_service.subscriber_builder().create().value();
@@ -32,8 +32,8 @@ int main(int argc, char** argv) {
             
             /* START: OPERATE ON DATA */
             for (int i = 0; i < MOTOR_COUNT; i++) {
-                std::cout << "Node " << i+1 << ": position is "<< sample.payload().motor_d[i].position << std::endl; 
-                std::cout << "Node " << i+1 << ": voltage is " << sample.payload().motor_d[i].voltage  << std::endl; 
+                std::cout << "Node " << i+1 << ": position is "<< sample.payload().motor_instance[i].position << std::endl; 
+                std::cout << "Node " << i+1 << ": voltage is " << sample.payload().motor_instance[i].voltage  << std::endl; 
             }
             /* END: OPERATE ON DATA */
 

@@ -3,7 +3,7 @@
 #include "moteus.h"
 #define MOTOR_COUNT 12
 
-struct motor_diagnostics {
+struct MotorDiagnostics {
     // mode diagnostics
     int mode; int fault; int trajectory_complete;
     // pvt 
@@ -15,14 +15,14 @@ struct motor_diagnostics {
     static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics";
 };
 
-struct motor_diagnostics_array {
-    motor_diagnostics motor_d[MOTOR_COUNT];
+struct MotorDiagnosticsArray {
+    MotorDiagnostics motor_instance[MOTOR_COUNT];
     static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics_array";
 };
 
 
 
-inline auto operator<<(std::ostream& stream, const motor_diagnostics& value) -> std::ostream& {
+inline auto operator<<(std::ostream& stream, const MotorDiagnostics& value) -> std::ostream& {
     stream << "motor_diagnostics { "
            << "mode: " << value.mode
            << ", fault: " << value.fault
@@ -42,7 +42,7 @@ inline auto operator<<(std::ostream& stream, const motor_diagnostics& value) -> 
 }
 
 namespace motor_info {
-    inline motor_diagnostics make_diag(const mjbots::moteus::Query::Result& r) {
+    inline MotorDiagnostics make_diag(const mjbots::moteus::Query::Result& r) {
         return {static_cast<int>(r.mode), r.fault, r.trajectory_complete,
                 r.position, r.velocity, r.torque,
                 r.q_current, r.d_current, r.abs_position,
@@ -98,7 +98,7 @@ namespace motor_info {
             case 101: return "servo.motor_fault_temperature";
             case 102: return "the commanded maximum torque";
             case 103: return "servopos.position_min or servopos.position_max";
-            default: return "UNKNOWN";
+            default:  return "UNKNOWN";
         }
     }
 }

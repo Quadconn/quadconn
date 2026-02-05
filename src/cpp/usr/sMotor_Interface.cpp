@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
     /* START: BRACKET GUARD -- SUB VALUE */
     auto node = NodeBuilder().create<ServiceType::Ipc>().value();
     auto service = node.service_builder(ServiceName::create("three_dof_theta").value())
-                    .publish_subscribe<three_dof_theta>()
+                    .publish_subscribe<ThreeDoFTheta>()
                     .open_or_create()
                     .value();
     auto subscriber = service.subscriber_builder().create().value();

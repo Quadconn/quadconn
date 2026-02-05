@@ -64,14 +64,39 @@ class ControllerState:
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.thread.start()
 
-    def _find_device(self, path):
-        if path: return evdev.InputDevice(path)
-        for name in evdev.list_devices():
-            d = evdev.InputDevice(name)
-            # Filter for gamepads (excluding mouse/keyboard interfaces)
-            if ('pad' in d.name.lower() or 'x-box' in d.name.lower()) and ecodes.EV_ABS in d.capabilities():
+    def _find_device(self, path=None):
+        if path:
+            return evdev.InputDevice(path)
+
+        devices = [evdev.InputDevice(p) for p in evdev.list_devices()]
+
+        for d in devices:
+            name = d.name.lower()
+            caps = d.capabilities()
+
+            # Xbox / gamepad detection
+            if (
+                ecodes.EV_ABS in caps and
+                ecodes.EV_KEY in caps and
+                (
+                    "xbox" in name or
+                    "x-box" in name or
+                    "360" in name or
+                    "controller" in name or
+                    "wireless receiver" in name
+                )
+            ):
+                print(f"[OK] Gamepad found: {d.path} -> {d.name}")
                 return d
+
+        # Debug dump
+        print("\n--- Available input devices ---")
+        for d in devices:
+            print(d.path, "->", d.name)
+        print("------------------------------\n")
+
         raise IOError("No gamepad found.")
+
 
     def _monitor_loop(self):
         try:

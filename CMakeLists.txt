@@ -8,6 +8,7 @@ project(quadconn
 # --- Compiler options ---
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 list(APPEND CMAKE_PREFIX_PATH "/usr/local/lib/cmake")  # Adjust if iceoryx2 is installed elsewhere
 
@@ -28,8 +29,8 @@ set(USR_DIR ${SRC_ROOT}/cpp/usr)
 
 
 # Primary application entries
-set(PINVERSE_SOURCES
-    ${USR_DIR}/pInverse_Kinematics_Solver.cpp
+set(DIAGNOSTICS_SOURCES
+    ${USR_DIR}/diagnostics_reader.cpp
 )
 
 set(SMOTOR_SOURCES
@@ -39,6 +40,8 @@ set(SMOTOR_SOURCES
 set(SMOTORG_SOURCES
     ${USR_DIR}/sMotor_Gamepad.cpp
 )
+
+
 
 # `iceoryx2_node` and `moteus` in this repository currently contain headers only.
 # If you add .cpp files there later, list them here explicitly, for example:
@@ -55,13 +58,13 @@ add_library(moteus INTERFACE)
 target_include_directories(moteus INTERFACE ${MOTEUS_DIR})
 
 # --- executables: one per logic block ---
-add_executable(pInverse_Kinematics ${PINVERSE_SOURCES} ${ICEORYX_SOURCES} ${MOTEUS_SOURCES})
+add_executable(diagnostics_reader ${DIAGNOSTICS_SOURCES} ${ICEORYX_SOURCES} ${MOTEUS_SOURCES})
 add_executable(sMotor_Interface ${SMOTOR_SOURCES} ${ICEORYX_SOURCES} ${MOTEUS_SOURCES})
 add_executable(sMotor_Gamepad ${SMOTORG_SOURCES} ${ICEORYX_SOURCES} ${MOTEUS_SOURCES})
 
 # --- Include directories ---
 # Modern CMake: avoid include_directories() and use target_include_directories only if needed
-target_include_directories(pInverse_Kinematics
+target_include_directories(diagnostics_reader
     PRIVATE
         ${USR_DIR}
 )
@@ -77,7 +80,7 @@ target_include_directories(sMotor_Gamepad
 )
 
 # --- Linking (Modern CMake way) ---
-target_link_libraries(pInverse_Kinematics
+target_link_libraries(diagnostics_reader
     PRIVATE
         pinocchio::pinocchio
         Eigen3::Eigen           # If needed (Pinocchio already uses Eigen internally)

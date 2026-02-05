@@ -1,0 +1,106 @@
+#include <cstdint>
+#include <iostream>
+#include "moteus.h"
+#define MOTOR_COUNT 12
+
+struct motor_diagnostics {
+    // mode diagnostics
+    int mode; int fault; int trajectory_complete;
+    // pvt 
+    double position; double velocity; double torque;
+    // current values
+    double q_current; double d_current; double abs_position;
+    // power diagnostics
+    double power; double motor_temperature; double voltage; double temperature;
+    static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics";
+};
+
+struct motor_diagnostics_array {
+    motor_diagnostics motor_d[MOTOR_COUNT];
+    static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics_array";
+};
+
+
+
+inline auto operator<<(std::ostream& stream, const motor_diagnostics& value) -> std::ostream& {
+    stream << "motor_diagnostics { "
+           << "mode: " << value.mode
+           << ", fault: " << value.fault
+           << ", trajectory_complete: " << value.trajectory_complete
+           << ", position: " << value.position
+           << ", velocity: " << value.velocity
+           << ", torque: " << value.torque
+           << ", q_current: " << value.q_current
+           << ", d_current: " << value.d_current
+           << ", abs_position: " << value.abs_position
+           << ", power: " << value.power
+           << ", motor_temperature: " << value.motor_temperature
+           << ", voltage: " << value.voltage
+           << ", temperature: " << value.temperature
+           << " }";
+    return stream;
+}
+
+namespace motor_info {
+    inline motor_diagnostics make_diag(const mjbots::moteus::Query::Result& r) {
+        return {static_cast<int>(r.mode), r.fault, r.trajectory_complete,
+                r.position, r.velocity, r.torque,
+                r.q_current, r.d_current, r.abs_position,
+                r.power, r.motor_temperature, r.voltage, r.temperature};
+    }
+
+    inline std::string_view mode_to_string(int mode) {
+        switch(mode) {
+            case 0:  return "kStopped";
+            case 1:  return "kFault";
+            case 2:  return "kEnabling";
+            case 3:  return "kCalibrating";
+            case 4:  return "kCalibrationComplete";
+            case 5:  return "kPwm";
+            case 6:  return "kVoltage";
+            case 7:  return "kVoltageFoc";
+            case 8:  return "kVoltageDq";
+            case 9:  return "kCurrent";
+            case 10: return "kPosition";
+            case 11: return "kPositionTimeout";
+            case 12: return "kZeroVelocity";
+            case 13: return "kStayWithin";
+            case 14: return "kMeasureInd";
+            case 15: return "kBrake";
+            default: return "UNKNOWN";
+        }
+    }
+
+    inline std::string_view fault_to_string(int fault) {
+        switch(fault) {
+            case 32:  return "calibration fault";
+            case 33:  return "motor driver fault";
+            case 34:  return "over voltage";
+            case 35:  return "encoder fault";
+            case 36:  return "motor not configured";
+            case 37:  return "pwm cycle overrun";
+            case 38:  return "over temperature";
+            case 39:  return "outside limit";
+            case 40:  return "under voltage";
+            case 41:  return "config changed";
+            case 42:  return "theta invalid";
+            case 43:  return "position invalid";
+            case 44:  return "driver enable fault";
+            case 45:  return "stop position deprecated";
+            case 46:  return "timing violation";
+            case 47:  return "bemf feedforward no accel";
+            case 48:  return "invalid limits";
+            case 96:  return "servo.max_velocity";
+            case 97:  return "servo.max_power_W";
+            case 98:  return "the maximum system voltage";
+            case 99:  return "servo.max_current_A";
+            case 100: return "servo.fault_temperature";
+            case 101: return "servo.motor_fault_temperature";
+            case 102: return "the commanded maximum torque";
+            case 103: return "servopos.position_min or servopos.position_max";
+            default: return "UNKNOWN";
+        }
+    }
+}
+
+

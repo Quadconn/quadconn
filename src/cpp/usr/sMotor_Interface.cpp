@@ -47,14 +47,14 @@ int main(int argc, char** argv) {
 
     /* START: BRACKET GUARD -- SUB VALUE */
     auto node = NodeBuilder().create<ServiceType::Ipc>().value();
-    auto service = node.service_builder(ServiceName::create("three_dof_theta").value())
-                    .publish_subscribe<three_dof_theta>()
+    auto service = node.service_builder(ServiceName::create("ThreeDoFTheta").value())
+                    .publish_subscribe<ThreeDoFTheta>()
                     .open_or_create()
                     .value();
     auto subscriber = service.subscriber_builder().create().value();
     // publishing motor diagnostics
-    auto p_service = node.service_builder(ServiceName::create("motor_diagnostics_array").value())
-                    .publish_subscribe<motor_diagnostics_array>()
+    auto p_service = node.service_builder(ServiceName::create("MotorDiagnosticsArray").value())
+                    .publish_subscribe<MotorDiagnosticsArray>()
                     .open_or_create()
                     .value();
     auto publisher = p_service.publisher_builder().create().value();
@@ -111,13 +111,13 @@ int main(int argc, char** argv) {
         }   
 
 
-        motor_diagnostics_array diags{};
+        MotorDiagnosticsArray diags{};
         for (auto const& [id, result] : servo_data) {
             int target_idx = id - 1;
 
 
             if (target_idx >= 0 && target_idx < MOTOR_COUNT) {
-                diags.motor_d[target_idx] = motor_info::make_diag(result);
+                diags.motor_instance[target_idx] = motor_info::make_diag(result);
             }
         }
         

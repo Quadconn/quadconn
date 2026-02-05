@@ -21,8 +21,8 @@ int main(int argc, char** argv) {
 
     // Define initial positions, indexed as N+1 as nodes
     std::array<double, MOTOR_COUNT> zero_positions = 
-    {rad2turns(0.0),               rad2turns(0.0),      rad2turns(M_PI / 2),
-     rad2turns(M_PI),              rad2turns(0.0),      rad2turns(0.0),
+    {rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
+     rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
      rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
      rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0)};
 

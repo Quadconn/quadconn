@@ -117,10 +117,10 @@ int main(int argc, char** argv) {
 
 
             if (target_idx >= 0 && target_idx < MOTOR_COUNT) {
-                diags.motor_d[target_idx] = make_diag(result);
+                diags.motor_d[target_idx] = motor_info::make_diag(result);
             }
         }
-
+        
         // Publish the full diagnostics array once per loop
         auto sample = publisher.loan_uninit().value();
         auto init_sample = sample.write_payload(diags);

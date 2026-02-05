@@ -18,30 +18,26 @@ int main(int argc, char** argv) {
 
     while(node.wait(UPDATE_RATE).has_value()) {
         
-        /* START: USER CODE: */
-
-        /* END: USER CODE */ 
         
-        /* END: BRACKET GUARD -- SEND PUB VALUE */
         auto receive_result = subscriber.receive();
         if (!receive_result.has_value()) {
             std::cerr << "IPC Error: " << static_cast<int>(receive_result.error()) << "\n";
             continue; 
         }
-
         auto sample_opt = std::move(receive_result.value());
-        // Check if we actually received a sample 
+
+        // receive data (in sample.payload())
         if (sample_opt.has_value()) {
             const auto& sample = sample_opt.value();
             
+            /* START: OPERATE ON DATA */
             for (int i = 0; i < MOTOR_COUNT; i++) {
                 std::cout << "Node " << i+1 << ": position is "<< sample.payload().motor_d[i].position << std::endl; 
                 std::cout << "Node " << i+1 << ": voltage is " << sample.payload().motor_d[i].voltage  << std::endl; 
             }
-            // Access Payload (Fix for '->')
+            /* END: OPERATE ON DATA */
 
         }
-        /* END: BRACKET GUARD -- SEND PUB VALUE */
     }
     return 0;
 }

@@ -4,7 +4,7 @@ import iceoryx2 as iox2
 from robot import Robot
 import ctypes
 
-class three_dof_theta(ctypes.Structure):
+class ThreeDoFTheta(ctypes.Structure):
     _fields_ = [
         ("theta1", ctypes.c_double),
         ("theta2", ctypes.c_double),
@@ -12,14 +12,14 @@ class three_dof_theta(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"three_dof_theta {{theta1: {self.theta1}, theta2: {self.theta2}, theta3: {self.theta3} }}"
+        return f"ThreeDoFTheta {{theta1: {self.theta1}, theta2: {self.theta2}, theta3: {self.theta3} }}"
 
     @staticmethod
     def type_name() -> str:
         # should have same val as IOX2_TYPE_NAME in cpp file
-        return "three_dof_theta"
+        return "ThreeDoFTheta"
 
-class gamepad_data(ctypes.Structure):
+class GamepadData(ctypes.Structure):
     _fields_ = [
         ("dpad_x", ctypes.c_int),
         ("dpad_y", ctypes.c_int),
@@ -43,11 +43,11 @@ class gamepad_data(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"gamepad_data {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
+        return f"GamepadData {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
 
     @staticmethod
     def type_name() -> str:
-        return "gamepad_data"
+        return "GamepadData"
 
 urdf_file = Path(__file__).parent.parent.parent / "urdf/leg3dof.urdf"
 
@@ -76,15 +76,15 @@ if __name__ == "__main__":
     iox2.set_log_level_from_env_or(iox2.LogLevel.Info)
     node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
     service = (
-        node.service_builder(iox2.ServiceName.new("three_dof_theta"))
-        .publish_subscribe(three_dof_theta)
+        node.service_builder(iox2.ServiceName.new("ThreeDoFTheta"))
+        .publish_subscribe(ThreeDoFTheta)
         .open_or_create()
     )
     publisher = service.publisher_builder().create()
 
     service_subscriber = (
-        node.service_builder(iox2.ServiceName.new("gamepad_data"))
-        .publish_subscribe(gamepad_data)
+        node.service_builder(iox2.ServiceName.new("GamepadData"))
+        .publish_subscribe(GamepadData)
         .open_or_create()
     )
     subscriber = service_subscriber.subscriber_builder().create()
@@ -131,14 +131,14 @@ if __name__ == "__main__":
                         if sample is not None:
                             if zero_flag:
                                 sample = sample.write_payload(
-                                    three_dof_theta(0,0,0)
+                                    ThreeDoFTheta(0,0,0)
                                 )
                                 sample.send()
                                 print(f"sent values = {q}")
                                 zero_flag = False
                             else:
                                 sample = sample.write_payload(
-                                    three_dof_theta(theta1=q[0],theta2=q[1],theta3=q[2])
+                                    ThreeDoFTheta(theta1=q[0],theta2=q[1],theta3=q[2])
                                 )
                                 sample.send()
                                 print(f"sent values = {q}")

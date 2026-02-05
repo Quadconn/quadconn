@@ -47,13 +47,13 @@ int main(int argc, char** argv) {
 
     /* START: BRACKET GUARD -- SUB VALUE */
     auto node = NodeBuilder().create<ServiceType::Ipc>().value();
-    auto service = node.service_builder(ServiceName::create("three_dof_theta").value())
+    auto service = node.service_builder(ServiceName::create("ThreeDoFTheta").value())
                     .publish_subscribe<ThreeDoFTheta>()
                     .open_or_create()
                     .value();
     auto subscriber = service.subscriber_builder().create().value();
     // publishing motor diagnostics
-    auto p_service = node.service_builder(ServiceName::create("motor_diagnostics_array").value())
+    auto p_service = node.service_builder(ServiceName::create("MotorDiagnosticsArray").value())
                     .publish_subscribe<MotorDiagnosticsArray>()
                     .open_or_create()
                     .value();

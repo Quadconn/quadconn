@@ -1,7 +1,7 @@
 #include <cstdint>
 #include <iostream>
 
-struct twelve_dof_theta {
+struct TwelveDoFTheta {
     double  theta1;
     double  theta2;
     double  theta3;
@@ -14,11 +14,11 @@ struct twelve_dof_theta {
     double  theta10;
     double  theta11;
     double  theta12;
-    static constexpr const char* IOX2_TYPE_NAME = "twelve_dof_theta";
+    static constexpr const char* IOX2_TYPE_NAME = "TwelveDoFTheta";
 };
 
-inline auto operator<<(std::ostream& stream, const twelve_dof_theta& value) -> std::ostream& {
-    stream << "twelve_dof_theta { "
+inline auto operator<<(std::ostream& stream, const TwelveDoFTheta& value) -> std::ostream& {
+    stream << "TwelveDoFTheta { "
            << "node1: " << value.theta1
            << ", node2: " << value.theta2
            << ", node3: " << value.theta3

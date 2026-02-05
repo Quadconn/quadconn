@@ -12,18 +12,18 @@ struct MotorDiagnostics {
     double q_current; double d_current; double abs_position;
     // power diagnostics
     double power; double motor_temperature; double voltage; double temperature;
-    static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics";
+    static constexpr const char* IOX2_TYPE_NAME = "MotorDiagnostics";
 };
 
 struct MotorDiagnosticsArray {
     MotorDiagnostics motor_instance[MOTOR_COUNT];
-    static constexpr const char* IOX2_TYPE_NAME = "motor_diagnostics_array";
+    static constexpr const char* IOX2_TYPE_NAME = "MotorDiagnosticsArray";
 };
 
 
 
 inline auto operator<<(std::ostream& stream, const MotorDiagnostics& value) -> std::ostream& {
-    stream << "motor_diagnostics { "
+    stream << "MotorDiagnostics { "
            << "mode: " << value.mode
            << ", fault: " << value.fault
            << ", trajectory_complete: " << value.trajectory_complete

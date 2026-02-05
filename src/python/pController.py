@@ -5,7 +5,7 @@ import ctypes
 import time
 import iceoryx2 as iox2
 # --- 1. The C-Compatible Data Structure ---
-class gamepad_data(ctypes.Structure):
+class GamepadData(ctypes.Structure):
     _fields_ = [
         ("dpad_x", ctypes.c_int),
         ("dpad_y", ctypes.c_int),
@@ -29,11 +29,11 @@ class gamepad_data(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"gamepad_data {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
+        return f"GamepadData {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
 
     @staticmethod
     def type_name() -> str:
-        return "gamepad_data"
+        return "GamepadData"
 
 # --- 2. The Controller Logic ---
 class ControllerState:
@@ -163,8 +163,8 @@ if __name__ == "__main__":
     iox2.set_log_level_from_env_or(iox2.LogLevel.Info)
     node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
     service = (
-        node.service_builder(iox2.ServiceName.new("gamepad_data"))
-        .publish_subscribe(gamepad_data)
+        node.service_builder(iox2.ServiceName.new("GamepadData"))
+        .publish_subscribe(GamepadData)
         .open_or_create()
     )
     publisher = service.publisher_builder().create()

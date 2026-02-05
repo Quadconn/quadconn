@@ -9,7 +9,7 @@ int main(int argc, char** argv) {
     /* START: BRACKET GUARD -- INIT NODE */
     auto node = NodeBuilder().create<ServiceType::Ipc>().value();
     
-    auto s_service = node.service_builder(ServiceName::create("motor_diagnostics_array").value())
+    auto s_service = node.service_builder(ServiceName::create("MotorDiagnosticsArray").value())
                     .publish_subscribe<MotorDiagnosticsArray>()
                     .open_or_create()
                     .value();

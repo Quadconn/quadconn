@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cmath>
 
 #include "leg_ik.hpp"
 
@@ -10,11 +11,27 @@ constexpr double L2  = 0.140;
 int main() {
 
     Leg leftLeg;
+    Point target;
+    Point result;
 
-    if (leg_ik(leftLeg, L1 + L2, ABDUCTION_OFFSET, 0)) {
-        std::cout << leftLeg.abduction_angle << std::endl
-                  << leftLeg.hip_angle << std::endl
-                  << leftLeg.knee_angle << std::endl;
+    target.x = L1 + L2;
+    target.y = ABDUCTION_OFFSET;
+    target.z = 0.0;
+
+    std::cout << "Target: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
+    if (leg_ik(leftLeg, target.x, target.y, target.z)) {
+
+        leg_fk(result, leftLeg.hip_roll, leftLeg.hip_pitch, leftLeg.knee_pitch);
+        std::cout << "Result: (" << result.x << ", " << result.y << ", " << result.z << ")" << std::endl;
+
+        double error = std::sqrt(sq(target.x - result.x) + sq(target.y - result.y) + sq(target.z - result.z));
+
+        if (error < 0.005) {
+            std::cout << "Success!" << std::endl;
+        } else {
+            std::cout << "Fail!" << std::endl;
+        }
+        std::cout << "Error = " << error << std::endl;
     }
     return 0;
 }

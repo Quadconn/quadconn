@@ -1,6 +1,6 @@
-import iceoryx2 as iox2
-
 import ctypes
+
+from quad_ipc import QuadIpcSubscriber, QuadIpcError
 
 class JointAngles(ctypes.Structure):
     _fields_ = [
@@ -19,27 +19,19 @@ class JointAngles(ctypes.Structure):
 
 
 
-node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
+subIpc = QuadIpcSubscriber("joint_angles", JointAngles)
 
-service = (
-    node.service_builder(iox2.ServiceName.new("joint_angles"))
-    .publish_subscribe(JointAngles)
-    .open_or_create()
-)
-
-subscriber = service.subscriber_builder().create()
-
+# TODO: Handle these exeception in QuadIpc
 try:
     while True:
-        node.wait(iox2.Duration.from_millis(500))
+        subIpc.wait(500)
         while True:
-            sample = subscriber.receive()
-            if sample is not None:
-                data = sample.payload()
+            data = subIpc.receive()
+            if data is not None:
                 print("received: ", data.contents)
 
             else:
                 break
 
-except iox2.NodeWaitFailure:
+except QuadIpcError:
     print("exit");

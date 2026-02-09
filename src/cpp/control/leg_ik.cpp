@@ -59,8 +59,8 @@ bool leg_ik(JointAngles& out, double x, double y, double z) {
     cos_beta = std::clamp(cos_beta, -ACOS_CLAMP, ACOS_CLAMP);
     double beta = std::acos(cos_beta);
 
-    // Angle of link L2 wrt hip pitch (+/- makes knee bend backward or forward)
-    double knee_pitch = (std::numbers::pi - beta);
+    // Angle of link L2 wrt hip pitch (+/- makes knee bend forward/backward)
+    double knee_pitch = -(std::numbers::pi - beta);
 
     out.hip_roll    = hip_roll;
     out.hip_pitch   = hip_pitch;

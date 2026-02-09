@@ -17,9 +17,9 @@ int main() {
     Point target;
     Point result;
 
-    target.x = L1 + L2;
+    target.x = 0.1;
     target.y = ABDUCTION_OFFSET;
-    target.z = 0.0;
+    target.z = -(L1 + L2) /2;
 
     std::cout << "Target: (" << target.x << ", " << target.y << ", " << target.z << ")" << std::endl;
     if (leg_ik(leftLeg, target.x, target.y, target.z)) {
@@ -39,7 +39,7 @@ int main() {
 
     QuadIpcPublisher<JointAngles> ipc("Control", "joint_angles");
 
-    while (ipc.wait(500)) {
+    while (ipc.wait(100)) {
 
         ;
         ipc.send(JointAngles {.hip_roll = leftLeg.hip_roll, .hip_pitch = leftLeg.hip_pitch, .knee_pitch = leftLeg.knee_pitch});

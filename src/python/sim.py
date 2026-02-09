@@ -1,3 +1,5 @@
+import pybullet as p
+import time
 import ctypes
 
 from quad_ipc import QuadIpcSubscriber, QuadIpcError
@@ -18,20 +20,34 @@ class JointAngles(ctypes.Structure):
         return "JointAngles"
 
 
+if __name__ == "__main__":
 
-subIpc = QuadIpcSubscriber("joint_angles", JointAngles)
+    subIpc = QuadIpcSubscriber("joint_angles", JointAngles)
 
-# TODO: Handle these exeception in QuadIpc
-try:
-    while True:
-        subIpc.wait(500)
+    # Load model
+    physicsClient = p.connect(p.GUI)
+    startPos = [0,0,0]
+    startOrientation = p.getQuaternionFromEuler([0,0,0])
+    legId = p.loadURDF("../../urdf/leg3dof.urdf",startPos, startOrientation, useFixedBase=1)
+    jointIndicies = [i for i in range(p.getNumJoints(legId) - 1)]
+
+    try:
         while True:
-            data = subIpc.receive()
-            if data is not None:
-                print("received: ", data.contents)
+            subIpc.wait(100)
+            while True:
+                data = subIpc.receive()
+                if data is not None:
+                    print("received: ", data.contents)
 
-            else:
-                break
+                    q = [data.contents.hip_roll, data.contents.hip_pitch, data.contents.knee_pitch]
+                    p.setJointMotorControlArray(legId, jointIndicies, controlMode=p.POSITION_CONTROL, targetPositions=q)
 
-except QuadIpcError:
-    print("exit");
+                else:
+                    break
+
+            p.stepSimulation()
+            #time.sleep(1./240.)
+
+    except QuadIpcError:
+        p.disconnect()
+        print("exit");

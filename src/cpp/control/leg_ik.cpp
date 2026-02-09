@@ -15,7 +15,7 @@ constexpr double ACOS_CLAMP = 0.999999;
 //  - Add any reachability checks possible
 //  - Although using clamping, notify that target is being adjusted to make result reachable
 //  - Add body collision checks
-bool leg_ik(Leg& out, double x, double y, double z) {
+bool leg_ik(JointAngles& out, double x, double y, double z) {
 
     // ---- Looking head on into y-z plane -------
 

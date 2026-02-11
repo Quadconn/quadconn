@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     try:
         while True:
-            subIpc.wait(100)
+            subIpc.wait(10)
             while True:
                 data = subIpc.receive()
                 if data is not None:

@@ -11,8 +11,7 @@
 class QuadControl {
     public:
         QuadControl() : 
-            _front_left_foot_location(0.0, QuadConfig::ABDUCTION_OFFSET, 
-                                      -(QuadConfig::L1 + (QuadConfig::L2 / 2)))
+            _front_left_foot_location(QuadConfig::default_front_left_foot_location)
         {};
         void set_command(const Command& command);
         JointAngles step_gait();
@@ -21,8 +20,7 @@ class QuadControl {
     private:
         Command _command;
         Eigen::Vector3d _front_left_foot_location;
-        double _height;
-        int _ticks;
+        int _ticks = 0;
 
         void stance_next_foot_location(Eigen::Vector3d& foot_location);
         void swing_next_foot_location(Eigen::Vector3d& foot_location, double swing_proportion);

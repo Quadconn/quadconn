@@ -1,5 +1,11 @@
 #include "quad_control.hpp"
 
+#include <iostream>
+
+#include <cmath>
+#include <algorithm>
+#include <numbers>
+
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
@@ -98,7 +104,7 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     // Calculate inverse of commanded body velocity for x-y (z is not taken as inverse)
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
                                -_command.horizontal_velocity_y, 
-                               (_height - foot_location.z()) / QuadConfig::z_time_constant);
+                               (_command.height - foot_location.z()) / QuadConfig::z_time_constant);
 
     // Get inverse position delta for this time step
     Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * QuadConfig::dt;
@@ -172,7 +178,7 @@ int QuadControl::subphase_ticks() {
 
         if (phase_sum > phase_time) {
             // How many ticks deep since the start of the current(overlap or swing) sub-phase 
-            subphase_ticks = phase_time - (phase_sum + QuadConfig::phase_ticks[i]);
+            subphase_ticks = phase_time - (phase_sum - QuadConfig::phase_ticks[i]);
             return subphase_ticks;
         }
     }
@@ -210,6 +216,8 @@ JointAngles QuadControl::step_gait() {
         swing_next_foot_location(_front_left_foot_location, swing_proportion);
     }
 
+    std::cout << _front_left_foot_location << std::endl;
+    std::cout << _ticks << std::endl;
 
     _ticks++;
 

@@ -23,12 +23,16 @@ add_executable(Control)
 target_sources(Control
     PRIVATE
         main.cpp
-        leg_ik.cpp
+        quad_control.cpp
 
     PUBLIC
         FILE_SET HEADERS
         FILES
-            leg_ik.hpp
+            quad_control.hpp
+            quad_config.hpp
+            quad_ipc.hpp
+            command.hpp
+            joint_angles.hpp
             
 )
 

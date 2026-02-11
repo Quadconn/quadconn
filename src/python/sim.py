@@ -1,5 +1,4 @@
 import pybullet as p
-import time
 import ctypes
 
 from quad_ipc import QuadIpcSubscriber, QuadIpcError
@@ -30,6 +29,8 @@ if __name__ == "__main__":
     startOrientation = p.getQuaternionFromEuler([0,0,0])
     legId = p.loadURDF("../../urdf/leg3dof.urdf",startPos, startOrientation, useFixedBase=1)
     jointIndicies = [i for i in range(p.getNumJoints(legId) - 1)]
+    # Let physics server auto step the simulation
+    p.setRealTimeSimulation(1)
 
     try:
         while True:
@@ -45,8 +46,6 @@ if __name__ == "__main__":
                 else:
                     break
 
-            p.stepSimulation()
-            #time.sleep(1./240.)
 
     except QuadIpcError:
         p.disconnect()

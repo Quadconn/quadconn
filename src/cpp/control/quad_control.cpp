@@ -19,10 +19,6 @@ void QuadControl::set_command(const Command& command) {
     _command = command;
 }
 
-Eigen::Vector3d QuadControl::step_gait() {
-}
-
-
 JointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target) {
     constexpr double ACOS_CLAMP = 0.999999;
 
@@ -163,3 +159,59 @@ Eigen::Vector3d QuadControl::swing_raibert_touchdown_location() {
     return rot_delta_z * QuadConfig::default_front_left_foot_location + pos_delta_xy;
 }
 
+
+int QuadControl::subphase_ticks() {
+    // How many ticks deep within overall phase cycle
+    int phase_time = _ticks % QuadConfig::phase_length;
+    int phase_sum = 0;
+    int subphase_ticks = 0;
+
+    // Find what the current sub-phase is given the phase time
+    for (int i = 0; i < QuadConfig::num_phases; i++) {
+        phase_sum += QuadConfig::phase_ticks[i];
+
+        if (phase_sum > phase_time) {
+            // How many ticks deep since the start of the current(overlap or swing) sub-phase 
+            subphase_ticks = phase_time - (phase_sum + QuadConfig::phase_ticks[i]);
+            return subphase_ticks;
+        }
+    }
+    return -1;
+}
+
+
+int QuadControl::contact_phase() {
+    // How many ticks deep within overall phase cycle
+    int phase_time = _ticks % QuadConfig::phase_length;
+    int phase_sum = 0;
+    int i;
+    // Find what the current sub-phase is given the phase time
+    for (i = 0; i < QuadConfig::num_phases; i++) {
+        phase_sum += QuadConfig::phase_ticks[i];
+
+        if (phase_sum > phase_time) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+JointAngles QuadControl::step_gait() {
+    int contact_mode = QuadConfig::contact_phases[contact_phase()][QuadConfig::FL];
+
+    if (contact_mode == QuadConfig::STANCE) {
+        stance_next_foot_location(_front_left_foot_location);
+
+    // Swing
+    } else {
+        double swing_proportion = static_cast<double>(subphase_ticks()) / 
+                                  static_cast<double>(QuadConfig::swing_ticks);
+
+        swing_next_foot_location(_front_left_foot_location, swing_proportion);
+    }
+
+
+    _ticks++;
+
+    return leg_inverse_kinematics(_front_left_foot_location);
+}

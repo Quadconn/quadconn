@@ -1,6 +1,6 @@
 #include "quad_control.hpp"
 
-#include <iostream>
+#include <cassert>
 
 #include <cmath>
 #include <algorithm>
@@ -24,6 +24,32 @@ inline double sq(double a) {
 void QuadControl::set_command(const Command& command) {
     _command = command;
 }
+
+
+JointAngles QuadControl::step_gait() {
+    // Given the contact phase (swing or overlap) find the contact mode (swing or stance) for this leg
+    int contact_mode = QuadConfig::contact_phases[contact_phase()][QuadConfig::FL];
+
+    if (contact_mode == QuadConfig::STANCE) {
+        // Apply next stance location to foot
+        stance_next_foot_location(_front_left_foot_location);
+
+    // Swing
+    } else {
+        // How far into the swing we are (0->1 where 0 is start and 1 is completion)
+        double swing_proportion = static_cast<double>(contact_phase_depth()) / 
+                                  static_cast<double>(QuadConfig::swing_ticks);
+
+        // Apply next swing location to foot
+        swing_next_foot_location(_front_left_foot_location, swing_proportion);
+    }
+
+    _ticks++;
+
+    return leg_inverse_kinematics(_front_left_foot_location);
+}
+
+// Private Methods
 
 JointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target) {
     constexpr double ACOS_CLAMP = 0.999999;
@@ -84,6 +110,8 @@ JointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target) {
 Eigen::Vector3d QuadControl::leg_forward_kinematics(const JointAngles& angles) {
     Eigen::Vector3d result;
     
+    // Equation taken from derived forward kinematics from scripts/python/kinematics.py
+    
     result.x() = -QuadConfig::L1 * std::sin(angles.hip_pitch) - 
                   QuadConfig::L2 * std::sin(angles.hip_pitch + angles.knee_pitch);
 
@@ -98,8 +126,8 @@ Eigen::Vector3d QuadControl::leg_forward_kinematics(const JointAngles& angles) {
     return result;
 }
 
-// Private Methods
 
+// Apply next foot location for stance contact mode
 void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     // Calculate inverse of commanded body velocity for x-y (z is not taken as inverse)
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
@@ -120,6 +148,25 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
 }
 
 
+// Where to move the leg in x-y for the swing contact mode
+Eigen::Vector3d QuadControl::swing_raibert_touchdown_location() {
+    // Positional deltas x-y for current time step to achieve desired body velocity from commanded horizontal velocities
+    Eigen::Vector3d vel_xy(_command.horizontal_velocity_x, _command.horizontal_velocity_y, 0);
+
+    Eigen::Vector3d pos_delta_xy = vel_xy * 
+                                   QuadConfig::alpha * 
+                                   QuadConfig::stance_ticks * QuadConfig::dt;
+    // Rotational delta in z for current time step to achieve desired body yaw from commanded yaw rate
+    Eigen::Matrix3d rot_delta_z = Eigen::AngleAxisd(_command.yaw_rate * 
+                                                    QuadConfig::beta *
+                                                    QuadConfig::stance_ticks * QuadConfig::dt, 
+                                                    Eigen::Vector3d::UnitZ()).toRotationMatrix();
+    // Apply rotational and positional deltas to default stance
+    return rot_delta_z * QuadConfig::default_front_left_foot_location + pos_delta_xy;
+}
+
+
+// Apply next foot location for swing contact mode
 void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, double swing_proportion) {
     // Calculate swing height based on how far into the swing we are
     double swing_height = 0.0;
@@ -149,77 +196,52 @@ void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, doubl
 }
 
 
-Eigen::Vector3d QuadControl::swing_raibert_touchdown_location() {
-    // Positional deltas x-y for current time step to achieve desired body velocity from commanded horizontal velocities
-    Eigen::Vector3d vel_xy(_command.horizontal_velocity_x, _command.horizontal_velocity_y, 0);
-
-    Eigen::Vector3d pos_delta_xy = vel_xy * 
-                                   QuadConfig::alpha * 
-                                   QuadConfig::stance_ticks * QuadConfig::dt;
-    // Rotational delta in z for current time step to achieve desired body yaw from commanded yaw rate
-    Eigen::Matrix3d rot_delta_z = Eigen::AngleAxisd(_command.yaw_rate * 
-                                                    QuadConfig::beta *
-                                                    QuadConfig::stance_ticks * QuadConfig::dt, 
-                                                    Eigen::Vector3d::UnitZ()).toRotationMatrix();
-    // Apply rotational and positional deltas to default stance
-    return rot_delta_z * QuadConfig::default_front_left_foot_location + pos_delta_xy;
-}
-
-
-int QuadControl::subphase_ticks() {
-    // How many ticks deep within overall phase cycle
-    int phase_time = _ticks % QuadConfig::phase_length;
-    int phase_sum = 0;
-    int subphase_ticks = 0;
-
-    // Find what the current sub-phase is given the phase time
-    for (int i = 0; i < QuadConfig::num_phases; i++) {
-        phase_sum += QuadConfig::phase_ticks[i];
-
-        if (phase_sum > phase_time) {
-            // How many ticks deep since the start of the current(overlap or swing) sub-phase 
-            subphase_ticks = phase_time - (phase_sum - QuadConfig::phase_ticks[i]);
-            return subphase_ticks;
-        }
-    }
-    return -1;
-}
-
-
+// Find what the current contact phase is (swing or overlap) given how deep we are into the total gait
 int QuadControl::contact_phase() {
-    // How many ticks deep within overall phase cycle
-    int phase_time = _ticks % QuadConfig::phase_length;
-    int phase_sum = 0;
-    int i;
-    // Find what the current sub-phase is given the phase time
-    for (i = 0; i < QuadConfig::num_phases; i++) {
-        phase_sum += QuadConfig::phase_ticks[i];
+    // How many ticks deep within overall gait
+    int gait_tick_depth = _ticks % QuadConfig::total_gait_ticks;
+    int phase_tick_sum = 0;
+    int i = 0;
 
-        if (phase_sum > phase_time) {
-            return i;
+    // Find what the current contact phase is (swing or overlap) given how deep we are into the total gait
+    for (i = 0; i < QuadConfig::PHASE_COUNT; i++) {
+        phase_tick_sum += QuadConfig::phase_ticks[i];
+
+        if (phase_tick_sum > gait_tick_depth) {
+            break;
         }
     }
-    return -1;
+
+    // NOTE: A sign that gait tuning/timing configurations are messed up
+    assert(((0 <= i) && (i < QuadConfig::PHASE_COUNT)) && "contact_phase: i is not valid!");
+
+    return i;
 }
 
-JointAngles QuadControl::step_gait() {
-    int contact_mode = QuadConfig::contact_phases[contact_phase()][QuadConfig::FL];
 
-    if (contact_mode == QuadConfig::STANCE) {
-        stance_next_foot_location(_front_left_foot_location);
+// How many ticks deep into current contact phase (swing or overlap) since its start
+int QuadControl::contact_phase_depth() {
+    // How many ticks deep within overall gait
+    int gait_tick_depth = _ticks % QuadConfig::total_gait_ticks;
+    int phase_tick_sum = 0;
+    double phase_tick_depth = 0.0;
+    int i = 0;
 
-    // Swing
-    } else {
-        double swing_proportion = static_cast<double>(subphase_ticks()) / 
-                                  static_cast<double>(QuadConfig::swing_ticks);
+    // Find what the current contact phase is (swing or overlap) given how deep we are into the total gait
+    for (i = 0; i < QuadConfig::PHASE_COUNT; i++) {
+        phase_tick_sum += QuadConfig::phase_ticks[i];
 
-        swing_next_foot_location(_front_left_foot_location, swing_proportion);
+        if (phase_tick_sum > gait_tick_depth) {
+            // How many ticks deep into current phase (swing or overlap) since its start 
+            phase_tick_depth = gait_tick_depth - (phase_tick_sum - QuadConfig::phase_ticks[i]);
+            break;
+        }
     }
 
-    std::cout << _front_left_foot_location << std::endl;
-    std::cout << _ticks << std::endl;
+    // NOTE: A sign that gait tuning/timing configurations are messed up
+    assert(((0 <= i) && (i < QuadConfig::PHASE_COUNT)) && "contact_phase_depth: i is not valid!");
 
-    _ticks++;
-
-    return leg_inverse_kinematics(_front_left_foot_location);
+    return phase_tick_depth;
 }
+
+

@@ -9,9 +9,9 @@ struct JointAngles {
     static constexpr const char* IOX2_TYPE_NAME = "JointAngles";
 };
 
-inline auto operator<<(std::ostream& stream, const JointAngles& value) -> std::ostream& {
-    stream << "JointAngles { hip_roll: " << value.hip_roll;
-    stream << ", hip_pitch: "            << value.hip_pitch;
-    stream << ", knee_pitch: "           << value.knee_pitch << " }";
+inline auto operator<<(std::ostream& stream, const JointAngles& angle) -> std::ostream& {
+    stream << "JointAngles { hip_roll: " << angle.hip_roll;
+    stream << ", hip_pitch: "            << angle.hip_pitch;
+    stream << ", knee_pitch: "           << angle.knee_pitch << " }";
     return stream;
 }

@@ -26,42 +26,35 @@ def T(x, y, z):
                       [0, 0, 1, z],
                       [0, 0, 0, 1]])
 
-# Column to extract displacement vector
-D = sp.Matrix([[0],
-               [0],
-               [0],
-               [1]])
-
-I = sp.Matrix([[1, 0, 0, 0],
-               [0, 1, 0, 0],
-               [0, 0, 1, 0],
-               [0, 0, 0, 1]])
-
-
-
-# -------- Start of script -------------
-sp.init_printing(use_unicode=True)
 
 # NOTE: calculations are for a left leg!
-theta1, theta2, theta3 = sp.symbols('theta1 theta2 theta3')
-ab, l1, l2 = sp.symbols('ab l1 l2')
 
-a12 = Rx(theta1) * T(0, ab, 0)
-a23 = Ry(theta2) * T(0, 0, -l1)
-a34 = Ry(theta3) * T(0, 0, -l2)
+if __name__ == "__main__":
+    sp.init_printing(use_unicode=True)
 
-sp.pprint(a12)
-sp.pprint(a23)
-sp.pprint(a34)
+    theta1, theta2, theta3 = sp.symbols('theta1 theta2 theta3')
+    # Abduction length, thigh length, knee length
+    ab, l1, l2 = sp.symbols('ab l1 l2')
 
-# Forward kinematics eqn
-fk = a12 * a23 * a34
-fk = sp.trigsimp(fk)
+    # Hip roll
+    a12 = Rx(theta1) * T(0, ab, 0)
+    # Hip pitch
+    a23 = Ry(theta2) * T(0, 0, -l1)
+    # Knee pitch
+    a34 = Ry(theta3) * T(0, 0, -l2)
 
-# Extract the displacement vector and simplify trig
-p = fk[:3,3]
-px, py, pz = p
+    sp.pprint(a12)
+    sp.pprint(a23)
+    sp.pprint(a34)
 
-sp.pprint(px)
-sp.pprint(py)
-sp.pprint(pz)
+    # Forward kinematics eqn
+    fk = a12 * a23 * a34
+    fk = sp.trigsimp(fk)
+
+    # Extract the xyz equations and simplify trig
+    p = fk[:3,3]
+    px, py, pz = p
+
+    sp.pprint(px)
+    sp.pprint(py)
+    sp.pprint(pz)

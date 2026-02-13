@@ -1,4 +1,4 @@
-# --- TODO: REMOVE BEFORE PUSH---
+# --- TODO: Remove when we have proper sub builds ---
 cmake_minimum_required(VERSION 3.15)
 
 # Project metadata

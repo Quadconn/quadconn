@@ -10,7 +10,10 @@ struct Command {
     static constexpr const char* IOX2_TYPE_NAME = "Command";
 };
 
-// TODO DR: Finish definition of this.
-inline auto operator<<(std::ostream& stream, const Command& value) -> std::ostream& {
+inline auto operator<<(std::ostream& stream, const Command& cmd) -> std::ostream& {
+    stream << "Command { horizontal_velocity x|y: " << cmd.horizontal_velocity_x
+           << "|" << cmd.horizontal_velocity_y;
+    stream << ", yaw_rate :" << cmd.yaw_rate;
+    stream << ", height :" << cmd.height;
     return stream;
 }

@@ -1,7 +1,4 @@
 #include <iostream>
-#include <cmath>
-
-#include <iox2/iceoryx2.hpp>
 
 #include "command.hpp"
 #include "joint_angles.hpp"
@@ -17,6 +14,8 @@ int main() {
     QuadIpcPublisher<JointAngles> ipc("Control", "joint_angles");
     QuadControl quad;
 
+    // TODO DR: Integrate remote controller to supply these commands instead of
+    // a static one here
     Command command = {
         .horizontal_velocity_x = 0.4,
         .horizontal_velocity_y = -0.3,
@@ -28,11 +27,12 @@ int main() {
 
     while (ipc.wait(10)) {
 
-        ipc.send(quad.step_gait());
+        JointAngles angles = quad.step_gait();
 
-        std::cout << "Sent!" << std::endl;
+        ipc.send(angles);
+
+        std::cout << "Sent: " << angles << std::endl;
     }
-
 
     return 0;
 }

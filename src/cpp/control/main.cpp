@@ -25,9 +25,10 @@ int main() {
 
     quad.set_command(command);
 
-    while (ipc.wait(10)) {
+    JointAngles angles;
+    while (ipc.wait(QuadConfig::dt_milli)) {
 
-        JointAngles angles = quad.step_gait();
+        angles = quad.step_gait();
 
         ipc.send(angles);
 

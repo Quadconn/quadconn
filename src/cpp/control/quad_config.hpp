@@ -15,6 +15,7 @@ struct QuadConfig {
 
     // Program Tick length
     static constexpr double dt              = 0.01;
+    static constexpr int    dt_milli        = dt * 1E3;
     // Time step to clamp height correction speed
     static constexpr double z_time_constant = 0.02;
 

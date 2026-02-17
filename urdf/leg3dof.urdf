@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <robot name="leg3dof">
 
+<!-- NOTE: This urdf models a left leg-->
 
 <!-- Example of a link with visual data
   <link name="link_name">
@@ -27,7 +28,7 @@
 
 
   <!-- First link -->
-  <link name="link1">
+  <link name="hip">
     <visual>
       <origin xyz="0.025 0 0" rpy="0 0 0"/>
       <geometry>
@@ -40,7 +41,7 @@
   </link>
 
   <!-- Second link -->
-  <link name="link2">
+  <link name="thigh">
     <visual>
       <origin xyz="0.11175 0 0" rpy="0 0 0"/>
       <geometry>
@@ -53,11 +54,11 @@
   </link>
 
   <!-- Third link -->
-  <link name="link3">
+  <link name="calf">
     <visual>
-      <origin xyz="0.097125 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.097125" rpy="0 0 0"/>
       <geometry>
-        <box size="0.19425 0.05 0.05"/>
+        <box size="0.05 0.05 0.19425"/>
       </geometry>
       <material name="blue">
         <color rgba="0 0 1 1"/>
@@ -68,9 +69,9 @@
   <!-- End-effector -->
   <link name="foot">
     <visual>
-      <origin xyz="0.07 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.07" rpy="0 0 0"/>
       <geometry>
-        <box size="0.140 0.05 0.05"/>
+        <box size="0.05 0.05 0.140"/>
       </geometry>
       <material name="purple">
         <color rgba="1 0 1 1"/>
@@ -81,7 +82,7 @@
   <!-- Represents the very tip of the last link -->
   <link name="toe">
     <visual>
-      <origin xyz="-0.025 0 0" rpy="0 0 0"/>
+      <origin xyz="0 0 -0.025" rpy="0 0 0"/>
       <geometry>
         <box size="0.05 0.05 0.05"/>
       </geometry>
@@ -96,9 +97,9 @@
 
 
   <!-- Joint 1 -->
-  <joint name="joint1" type="revolute">
-    <parent link="link1"/>
-    <child  link="link2"/>
+  <joint name="hip_roll" type="revolute">
+    <parent link="hip"/>
+    <child  link="thigh"/>
 
     <origin xyz="0 0 0" rpy="0 0 0"/>
 
@@ -109,9 +110,9 @@
   </joint>
 
   <!-- Joint 2 -->
-  <joint name="joint2" type="revolute">
-    <parent link="link2"/>
-    <child  link="link3"/>
+  <joint name="hip_pitch" type="revolute">
+    <parent link="thigh"/>
+    <child  link="calf"/>
 
     <origin xyz="0.2235 0.04241 0" rpy="0 0 0"/>
 
@@ -122,11 +123,11 @@
   </joint>
 
   <!-- Joint 3 -->
-  <joint name="joint3" type="revolute">
-    <parent link="link3"/>
+  <joint name="knee_pitch" type="revolute">
+    <parent link="calf"/>
     <child  link="foot"/>
 
-    <origin xyz="0.19425 0.069 0" rpy="0 0 0"/>
+    <origin xyz="0 0.069 -0.19425" rpy="0 0 0"/>
 
     <axis xyz="0 1 0"/>
     
@@ -139,7 +140,7 @@
     <parent link="foot"/>
     <child  link="toe"/>
 
-    <origin xyz="0.140 0 0"/>
+    <origin xyz="0 0 -0.140"/>
   </joint>
 
 </robot>

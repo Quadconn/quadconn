@@ -2,9 +2,15 @@
 
 # Cloning With Submodules
 This project uses git submodules to contain its dependencies within the repository. To 
-clone the project and initialize the submodules run the following:
+freshly clone the project and initialize the submodules run the following:
 ```bash
 git clone --recursive https://github.com/Quadconn/quadconn.git 
+```
+
+If you have already cloned but want to initialize the submodules run the following:
+```bash
+git submodule init
+git submodule update
 ```
 
 # Installing Dependencies

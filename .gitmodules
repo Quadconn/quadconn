@@ -1,0 +1,6 @@
+[submodule "external/iceoryx2"]
+	path = external/iceoryx2
+	url = https://github.com/eclipse-iceoryx/iceoryx2.git
+[submodule "external/eigen"]
+	path = external/eigen
+	url = https://gitlab.com/libeigen/eigen.git

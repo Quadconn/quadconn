@@ -1,0 +1,8 @@
+# Place core python packages used in the project here. Only add the main module you're
+# using, not its dependencies, let the package manager handle installing the modules
+# dependencies.
+
+iceoryx2==0.8.1
+pybullet
+sympy
+moteus-gui

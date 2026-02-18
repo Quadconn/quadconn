@@ -1,21 +1,43 @@
 # Quadconn 
 
-# Installing Iceoryx2
-Commands to build Cpp bindings:
-```bash
-git clone https://github.com/eclipse-iceoryx/iceoryx2.git
-cd iceoryx2
-cmake -S . -B target/release -DCMAKE_BUILD_TYPE=Release
-cmake --build target/release
-sudo cmake --install target/release --prefix /usr/local
-```
-To have Python bindings, run the following code:
-```bash
-pip install iceoryx2
-```
-Highly recommend creating in a virtual environment!
+# Installing Dependencies
 
-# How to run the code
+## C++
+Using your system package manager install
+* c++ compiler
+* rust compiler
+* cmake
+* [gstreamer](https://gstreamer.freedesktop.org/download/#linux)
+
+All other dependencies can be installed by running the `external/boostrap.sh` script. Go to the 
+external directory and run the script as such: `./bootstrap`.
+
+## Python
+After creating a python virtual environment use the `requirements.txt` file to install the 
+dependencies as such:
+```bash
+pip install -r requirements.txt
+
+```
+
+
+# Building The Code
+By default the build will create all executables. The commands to do this are:
+```bash
+cmake -B build      # Configure step (only needs to be ran once)
+cmake --build build # Build step (run anytime you want to rebuild)
+```
+
+There are options that can be set during the build configuration to only build some of the
+executables by passing arguments to cmake as such:
+```bash
+cmake -B build -DMOTOR=OFF -DPERCEPTION=OFF # -DCONTROL=OFF can be used to not build the control code
+```
+This will configure cmake to only build the control code each time `cmake --build build` is ran. 
+Refer to the `CMakeLists.txt` file for more information about the build options.
+
+
+# Running The Code
 The CMakeFile currently creates individual executables for each node. Run them
 once they are created in the build directory:
 

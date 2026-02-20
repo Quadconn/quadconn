@@ -18,3 +18,6 @@ __pycache__
 
 # Mac OS Stuff
 .DS_Store
+
+# External installs
+install

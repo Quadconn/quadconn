@@ -13,6 +13,7 @@ int main(int argc, char** argv) {
                     .publish_subscribe<MotorDiagnosticsArray>()
                     .open_or_create()
                     .value();
+    
     auto subscriber = s_service.subscriber_builder().create().value();
     /* END: BRACKET GUARD -- INIT NODE */
 
@@ -29,15 +30,14 @@ int main(int argc, char** argv) {
         // receive data (in sample.payload())
         if (sample_opt.has_value()) {
             const auto& sample = sample_opt.value();
-            
             /* START: OPERATE ON DATA */
             for (int i = 0; i < MOTOR_COUNT; i++) {
                 std::cout << "Node " << i+1 << ": position is "<< sample.payload().motor_instance[i].position << std::endl; 
                 std::cout << "Node " << i+1 << ": voltage is " << sample.payload().motor_instance[i].voltage  << std::endl; 
+                
             }
             /* END: OPERATE ON DATA */
-
-        }
+        }    
     }
     return 0;
 }

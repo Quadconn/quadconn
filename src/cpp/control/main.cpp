@@ -7,6 +7,7 @@
 #include "quad_ipc.hpp"
 
 
+
 int main() {
 
     JointAngles leftLegAngles;

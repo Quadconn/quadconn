@@ -10,11 +10,12 @@
 #include "three_dof_theta.hpp"
 #include "motor_diagnostics.hpp"
 #include "iox2/iceoryx2.hpp"
+#include "../control/quad_ipc.hpp"
 
-
-
+#define UPDATE_RATE_MS 5
+#define MOTOR_NUM 3
 // Convert radians to turns
-double rad2turns(double radians) {
+inline double rad2turns(double radians) {
     return 9*(radians / (2.0 * M_PI));
 }
 
@@ -22,8 +23,7 @@ int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
 
-    // how often the loop pools
-    constexpr bb::Duration UPDATE_RATE = bb::Duration::from_millis(10);
+
     
     // change usb-id depending on motor id used, map motor controller node ids to bus
     auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
@@ -33,37 +33,35 @@ int main(int argc, char** argv) {
         {3, std::move(bus_b)}
     };
 
-    // Initialize Controllers
-    std::vector<std::shared_ptr<moteus::Controller>> controllers;
-    for (auto const& [id, bus] : id_to_bus) {
-        moteus::Controller::Options options{};
-        options.id = id;
-        options.transport = bus; 
-        controllers.push_back(std::make_shared<moteus::Controller>(options));
-    }
+    /* START: BRACKET GUARD -- Init Node */
+    QuadIpcPublisherSubscriber<ThreeDoFTheta,MotorDiagnosticsArray> 
+        motor_ipc("motor_controller", "ThreeDoFTheta", "MotorDiagnosticsArray");
+    // auto node simplenode::makenode("")
+    // auto subscriber = node.add_service<ThreeDoFTheta>("name");
+    // service.receive()
+    // auto node 
 
+    
+    /* END: BRACKET GUARD -- Init Node */
+
+    // Initialize Controllers
+    std::array<std::shared_ptr<moteus::Controller>, MOTOR_NUM> controllers;
+    {
+    int i = 0; 
+        for (auto const& [id, bus] : id_to_bus) {
+            moteus::Controller::Options options{};
+            options.id = id;
+            options.transport = bus; 
+            controllers[i] = std::make_shared<moteus::Controller>(options);
+            i++;
+        }
+    }
     // Stop everything to clear faults first
     for (auto& c : controllers) { c->SetStop(); }
 
-    /* START: BRACKET GUARD -- SUB VALUE */
-    auto node = NodeBuilder().create<ServiceType::Ipc>().value();
-    auto service = node.service_builder(ServiceName::create("ThreeDoFTheta").value())
-                    .publish_subscribe<ThreeDoFTheta>()
-                    .open_or_create()
-                    .value();
-    auto subscriber = service.subscriber_builder().create().value();
-    // publishing motor diagnostics
-    auto p_service = node.service_builder(ServiceName::create("MotorDiagnosticsArray").value())
-                    .publish_subscribe<MotorDiagnosticsArray>()
-                    .open_or_create()
-                    .value();
-    auto publisher = p_service.publisher_builder().create().value();
-    /* END: BRACKET GUARD -- SUB VALUE */
-
-
 
     // Prepare batch of commands
-    std::vector<double> target_angles = {0.0, 0.0, 0.0};
+    std::array<double, MOTOR_NUM> target_angles{0.0, 0.0, 0.0};
     std::map<int, moteus::Query::Result> servo_data;
     std::map<std::shared_ptr<moteus::Fdcanusb>, std::vector<moteus::CanFdFrame>> bus_cmd;
 
@@ -71,26 +69,21 @@ int main(int argc, char** argv) {
     std::cout << "starting motor loop\n";
     
     // attempt to receive value every 10 ms
-    while (node.wait(UPDATE_RATE).has_value()) { 
+    while (motor_ipc.wait(UPDATE_RATE_MS)) { 
         
         // clear on new loop
         servo_data.clear();
         bus_cmd.clear();
 
-        auto receive_result = subscriber.receive();
-        if (receive_result.has_value()) {
-            auto sample_opt = std::move(receive_result.value());
-            if (sample_opt.has_value()) {
-                const auto& p = sample_opt.value().payload();
-                target_angles = {p.theta1, p.theta2, p.theta3};
-            }
+        
+        // receiving values 
+        auto sample_opt = motor_ipc.receive();
+        if (sample_opt.has_value()) {
+
+            const auto& p = sample_opt.value().payload();
+            target_angles = {p.theta1, p.theta2, p.theta3};
         }
-
-        //  
         
-        
-
-
         for (size_t i = 0; i < controllers.size(); ++i) {
             moteus::PositionMode::Command cmd;
             cmd.position = rad2turns(target_angles[i]);
@@ -122,10 +115,7 @@ int main(int argc, char** argv) {
         }
         
         // Publish the full diagnostics array once per loop
-        auto sample = publisher.loan_uninit().value();
-        auto init_sample = sample.write_payload(diags);
-        send(std::move(init_sample)).value();
-
+        motor_ipc.send(diags);
         
         // ::usleep(10000); 
     }
@@ -134,4 +124,3 @@ int main(int argc, char** argv) {
     for (auto& c : controllers) { c->SetStop(); }
     return 0;
 }
-

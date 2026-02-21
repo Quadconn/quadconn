@@ -161,6 +161,8 @@ inline iox2::Subscriber<iox2::ServiceType::Ipc, T, void>
         return service_name.subscriber_builder().create().value();
     }
 
+
+
 template<typename T>
 inline iox2::Subscriber<iox2::ServiceType::Ipc, T, void>
     make_publisher(const char* publisher_name, iox2::PortFactoryPublishSubscribe<iox2::ServiceType::Ipc, T, void> service_name) {
@@ -171,12 +173,13 @@ inline iox2::Subscriber<iox2::ServiceType::Ipc, T, void>
 // received [None] is returned. If a failure occurs [ReceiveError] is returned.
 template<typename T>
 bool receive_sample(iox2::Subscriber<iox2::ServiceType::Ipc, T, void> subscriber, T& data_out) {
-        auto receive_result = subscriber.receive();
+    auto sample_opt = subscriber->receive().expect("Failed to pull from subscriber");    
+    auto receive_result = subscriber.receive();
         if (!receive_result.has_value()) {
             std::cerr << "IPC Error: " << static_cast<int>(receive_result.error()) << "\n";
             return false; 
         }
-        auto sample_opt = std::move(receive_result.value());
+        return true;
     }
 
 

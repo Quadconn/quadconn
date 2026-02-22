@@ -120,14 +120,14 @@ class ControllerState:
                     elif event.value == 0: self.buttons.discard(event.code)
         except OSError: pass
 
-    def read(self) -> gamepad_data:
+    def read(self) -> GamepadData:
         """
         Returns a populated gamepad_data ctypes structure.
         """
         # Helper lambda to check button state (returns 1 or 0)
         btn = lambda name: 1 if self.BTN_CONSTANTS[name] in self.buttons else 0
 
-        return gamepad_data(
+        return GamepadData(
             dpad_x=int(self.dpad_x),
             dpad_y=int(self.dpad_y),
             

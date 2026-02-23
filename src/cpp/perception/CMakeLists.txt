@@ -13,3 +13,16 @@ target_link_libraries(camera_stream
         PkgConfig::GST  # This automatically handles includes AND libs
 )
 
+
+
+add_executable(udp_sender)
+
+target_sources(udp_sender
+    PRIVATE
+        udp_sender.cpp
+)
+
+target_link_libraries(udp_sender 
+    PRIVATE 
+        PkgConfig::GST  # This automatically handles includes AND libs
+)

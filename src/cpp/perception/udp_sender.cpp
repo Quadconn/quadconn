@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <iostream>
 
-#include "motor_diagnostics.hpp"
+#include "../common/motor_diagnostics.hpp"
 #include "../common/quad_ipc.hpp"
 
 const char* OPERATOR_IP = "100.119.158.85";

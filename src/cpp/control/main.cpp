@@ -61,8 +61,8 @@ int main() {
             auto& data_ref = received_val.value();
 
             // assigning velocities according to controller values
-            command.horizontal_velocity_x = HORIZONTAL_MAX * deadzone(data_ref.lx);
-            command.horizontal_velocity_y = VERTICAL_MAX *   deadzone(data_ref.ly);
+            command.horizontal_velocity_x = HORIZONTAL_MAX * deadzone(data_ref.ly);
+            command.horizontal_velocity_y = -VERTICAL_MAX *   deadzone(data_ref.lx);
         }
 
 

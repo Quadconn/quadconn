@@ -25,15 +25,15 @@ int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
 
-
+    
     
     // change usb-id depending on motor id used, map motor controller node ids to bus
-    const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
+    // const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
     const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
+        {4, bus_b},
+        {5, bus_b},
+        {6, bus_b}
         // {4, bus_b},
         // {5, bus_b},
         // {6, bus_b}

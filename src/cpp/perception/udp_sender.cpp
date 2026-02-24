@@ -85,6 +85,7 @@ int main()
 
         MotorDiagnosticsArray dummy_data = {};
         for (int i = 0; i < MOTOR_COUNT; i++) {
+            
             dummy_data.motor_instance[i].abs_position = randomFloat();
             dummy_data.motor_instance[i].d_current = randomFloat();
             dummy_data.motor_instance[i].fault = rand();

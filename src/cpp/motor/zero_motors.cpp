@@ -31,12 +31,14 @@ int main(int argc, char** argv) {
     auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
     auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
+        {4, bus_b},
+        {5, bus_b},
+        {6, bus_b}
     };
 
     // Initialize Controllers
+    std::cout << "initializing motors\n";
+
     std::array<std::shared_ptr<moteus::Controller>, MOTOR_NUM> controllers;
     {
     int i = 0; 
@@ -48,6 +50,7 @@ int main(int argc, char** argv) {
             i++;
         }
     }
+    std::cout << "clearing faults\n";
     // Stop everything to clear faults first
     for (auto& c : controllers) { c->SetStop(); }
 

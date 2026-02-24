@@ -7,6 +7,7 @@ target_sources(common
         FILE_SET HEADERS
         FILES
             quad_ipc.hpp
+            quad_common.hpp
             joint_angles.hpp
             command.hpp
             

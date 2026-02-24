@@ -2,7 +2,8 @@
 # using, not its dependencies, let the package manager handle installing the modules
 # dependencies.
 
-iceoryx2==0.8.1
-pybullet
-sympy
-moteus-gui
+iceoryx2==0.8.1  # Inter-process communication
+pybullet         # Simulator / Visualization
+sympy            # Symbolic math scripting
+moteus-gui       # Motor controller configuration
+xacro            # URDF generation

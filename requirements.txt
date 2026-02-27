@@ -6,3 +6,10 @@ iceoryx2==0.8.1
 pybullet
 sympy
 moteus-gui
+
+# GUI Required Packages
+PyQt6
+numpy
+opencv-python-headless
+ultralytics
+PyGObject

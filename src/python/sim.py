@@ -1,4 +1,5 @@
 import pybullet as p
+import pybullet_data
 
 from quad_ipc import QuadIpcSubscriber, QuadIpcError
 import joint_angles
@@ -13,9 +14,13 @@ if __name__ == "__main__":
 
     # Load model
     physicsClient = p.connect(p.GUI)
-    startPos = [0,0,0]
+    p.setAdditionalSearchPath(pybullet_data.getDataPath())
+    planeId = p.loadURDF("plane.urdf")
+    p.setGravity(0, 0, -9.8)
+
+    startPos = [0,0,1]
     startOrientation = p.getQuaternionFromEuler([0,0,0])
-    legId = p.loadURDF("../../urdf/basic_quad.urdf",startPos, startOrientation, useFixedBase=True)
+    legId = p.loadURDF("../../urdf/basic_quad.urdf",startPos, startOrientation, useFixedBase=False)
     jointIndicies = [i for i in range(p.getNumJoints(legId))]
     # Let physics server auto step the simulation
     p.setRealTimeSimulation(True)

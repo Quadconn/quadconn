@@ -31,6 +31,8 @@ class QuadControl {
 
         LegJointAngles leg_inverse_kinematics(const Eigen::Vector3d& target, std::size_t leg_index);
 
+        void correct_joint_signs(LegJointAngles& angles, std::size_t leg_index);
+
         Eigen::Vector3d leg_forward_kinematics(const LegJointAngles& angles);
 
         void stance_next_foot_location(Eigen::Vector3d& foot_location);

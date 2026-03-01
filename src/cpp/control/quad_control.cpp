@@ -71,6 +71,9 @@ BodyJointAngles QuadControl::body_inverse_kinematics(const std::array<Eigen::Vec
 }
 
 
+// Calculates the leg joint angles needed to reach a target position with respect to the legs hip origin.
+// NOTE: Core calculation assumes a front left leg with each joints positive rotation to go counter clock wise,
+// this is compensated for by a helper function to work for all legs.
 LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target, std::size_t leg_index) {
     constexpr double ACOS_CLAMP = 0.999999;
 
@@ -121,11 +124,37 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     // Angle of link L2 wrt hip pitch (+/- makes knee bend forward/backward)
     double knee_pitch = -(std::numbers::pi - beta);
 
-    return LegJointAngles {.hip_roll   = hip_roll, 
-                           .hip_pitch  = hip_pitch,
-                           .knee_pitch = knee_pitch};
+    LegJointAngles leg_joint_angles = LegJointAngles {.hip_roll   = hip_roll, 
+                                                      .hip_pitch  = hip_pitch,
+                                                      .knee_pitch = knee_pitch};
+
+    correct_joint_signs(leg_joint_angles, leg_index);
+
+    return leg_joint_angles;
 }
 
+// Corrects the sign of leg joint angles per each legs unique rotation axis.
+// NOTE: It is assumed that all joints by default rotate positively in the counter
+// clock wise direction
+void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_index) {
+    // For back legs hip roll must go opposite direction than front legs since they 
+    // are mounted reversed 
+    //
+    // For right side legs hip pitch and knee pitch must go opposite direction than
+    // left side legs
+    if (leg_index == common::FL) {
+        return;
+    } else if (leg_index == common::FR) {
+        angles.hip_pitch  = -angles.hip_pitch;
+        angles.knee_pitch = -angles.knee_pitch;
+    } else if (leg_index == common::BL) {
+        angles.hip_roll   = -angles.hip_roll;
+    } else if (leg_index == common::BR) {
+        angles.hip_roll   = -angles.hip_roll;
+        angles.hip_pitch  = -angles.hip_pitch;
+        angles.knee_pitch = -angles.knee_pitch;
+    }
+}
 
 Eigen::Vector3d QuadControl::leg_forward_kinematics(const LegJointAngles& angles) {
     Eigen::Vector3d result;

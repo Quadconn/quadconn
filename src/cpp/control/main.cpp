@@ -29,10 +29,6 @@ int main() {
         angles = quad.step_gait();
 
         ipc.send(angles);
-
-        for (LegJointAngles leg_angle : angles.body_joint_angles) {
-            std::cout << "Sent: " << leg_angle << std::endl;
-        }
     }
 
     return 0;

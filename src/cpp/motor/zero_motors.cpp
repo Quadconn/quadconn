@@ -7,14 +7,10 @@
 #include <map>
 
 #include "moteus.h"
-#include "motor_diagnostics.hpp"
+#include "../common/motor_diagnostics.hpp"
 
+#define MOTOR_NUM  3
 
-
-// Convert radians to turns
-double rad2turns(double radians) {
-    return 9*(radians / (2.0 * M_PI));
-}
 
 int main(int argc, char** argv) {
     using namespace mjbots;
@@ -28,21 +24,28 @@ int main(int argc, char** argv) {
 
     // TODO: define once across motor interface and zeroing cpp files
     auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    //auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, std::move(bus_a)},
-        {3, std::move(bus_b)}
+        {4, bus_a},
+        {5, bus_a},
+        {6, bus_a}
     };
 
     // Initialize Controllers
-    std::vector<std::shared_ptr<moteus::Controller>> controllers;
-    for (auto const& [id, bus] : id_to_bus) {
-        moteus::Controller::Options options{};
-        options.id = id;
-        options.transport = bus; 
-        controllers.push_back(std::make_shared<moteus::Controller>(options));
-    }
+    std::cout << "initializing motors\n";
 
+    std::array<std::shared_ptr<moteus::Controller>, MOTOR_NUM> controllers;
+    {
+    int i = 0; 
+        for (auto const& [id, bus] : id_to_bus) {
+            moteus::Controller::Options options{};
+            options.id = id;
+            options.transport = bus; 
+            controllers[i] = std::make_shared<moteus::Controller>(options);
+            i++;
+        }
+    }
+    std::cout << "clearing faults\n";
     // Stop everything to clear faults first
     for (auto& c : controllers) { c->SetStop(); }
 

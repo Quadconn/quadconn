@@ -12,21 +12,24 @@ target_link_libraries(diagnostics_reader
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus 
+        common
 )
 
 # ----------------------------------------
 
-add_executable(sMotor_Interface)
+add_executable(motor_interface)
 
-target_sources(sMotor_Interface
+target_sources(motor_interface
     PRIVATE
-        sMotor_Interface.cpp
+        motor_interface.cpp
 )
 
-target_link_libraries(sMotor_Interface
+target_link_libraries(motor_interface
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus
+        common
+        
 )
 
 # ----------------------------------------
@@ -42,5 +45,6 @@ target_link_libraries(zero_motors
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus
+        common
 )
 

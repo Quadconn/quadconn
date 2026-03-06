@@ -3,12 +3,13 @@
 
 
 struct GamepadData {
+    double lx; double ly; double rx; double ry;
     int dpad_x; int dpad_y;
+    double RT; double LT;
     int A; int B; int X; int Y;
     int Home; int Start; int Back; 
     int L3; int R3;
-    double lx; double ly; double rx; double ry;
-    int RB; double RT; int LB; double LT;
+    int RB; int LB; 
     static constexpr const char* IOX2_TYPE_NAME = "GamepadData";
 };
 

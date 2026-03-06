@@ -2,7 +2,7 @@
 #include <iostream>
 #include "moteus.h"
 #define MOTOR_COUNT 12
-
+#define GEAR_RATIO 9
 struct MotorDiagnostics {
     // mode diagnostics
     int mode; int fault; int trajectory_complete;
@@ -39,6 +39,10 @@ inline auto operator<<(std::ostream& stream, const MotorDiagnostics& value) -> s
            << ", temperature: " << value.temperature
            << " }";
     return stream;
+}
+
+inline double rad2turns(double radians) {
+    return GEAR_RATIO*(radians / (2.0 * M_PI));
 }
 
 namespace motor_info {

@@ -7,8 +7,14 @@ import iceoryx2 as iox2
 # --- 1. The C-Compatible Data Structure ---
 class GamepadData(ctypes.Structure):
     _fields_ = [
-        ("dpad_x", ctypes.c_int),
-        ("dpad_y", ctypes.c_int),
+        ("lx", ctypes.c_double),
+        ("ly", ctypes.c_double),
+        ("rx", ctypes.c_double),
+        ("ry", ctypes.c_double),
+        ("dpad_x", ctypes.c_int), 
+        ("dpad_y", ctypes.c_int), 
+        ("RT", ctypes.c_double),
+        ("LT", ctypes.c_double),
         ("A", ctypes.c_int),
         ("B", ctypes.c_int),
         ("X", ctypes.c_int),
@@ -18,14 +24,8 @@ class GamepadData(ctypes.Structure):
         ("Back", ctypes.c_int),
         ("L3", ctypes.c_int),
         ("R3", ctypes.c_int),
-        ("lx", ctypes.c_double),
-        ("ly", ctypes.c_double),
-        ("rx", ctypes.c_double),
-        ("ry", ctypes.c_double),
         ("RB", ctypes.c_int),
-        ("RT", ctypes.c_double),
-        ("LB", ctypes.c_int),
-        ("LT", ctypes.c_double)
+        ("LB", ctypes.c_int)
     ]
 
     def __str__(self):
@@ -120,14 +120,14 @@ class ControllerState:
                     elif event.value == 0: self.buttons.discard(event.code)
         except OSError: pass
 
-    def read(self) -> gamepad_data:
+    def read(self) -> GamepadData:
         """
         Returns a populated gamepad_data ctypes structure.
         """
         # Helper lambda to check button state (returns 1 or 0)
         btn = lambda name: 1 if self.BTN_CONSTANTS[name] in self.buttons else 0
 
-        return gamepad_data(
+        return GamepadData(
             dpad_x=int(self.dpad_x),
             dpad_y=int(self.dpad_y),
             
@@ -173,15 +173,14 @@ if __name__ == "__main__":
         while True:
             node.wait(cycle_time)
 
-            data = controller.read()
-
+            # constructing directly in sample, cannot print
             sample = publisher.loan_uninit()
             if sample is not None:
                 sample = sample.write_payload(
-                    data
+                    controller.read()
                 )
                 sample.send()
-                print(f"\r{data}", end="")
+                # print(f"\r{data}", end="")
             else:
                 print("could not loan memory")
             
@@ -189,5 +188,5 @@ if __name__ == "__main__":
             
             
     except KeyboardInterrupt:
-        print("\nStopping...")
+        print("\nStopping cleanly...")
         controller.running = False

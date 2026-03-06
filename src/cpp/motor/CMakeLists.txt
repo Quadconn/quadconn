@@ -12,6 +12,7 @@ target_link_libraries(diagnostics_reader
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus 
+        common
 )
 
 # ----------------------------------------
@@ -27,6 +28,8 @@ target_link_libraries(motor_interface
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus
+        common
+        
 )
 
 # ----------------------------------------
@@ -42,5 +45,6 @@ target_link_libraries(zero_motors
     PRIVATE
         iceoryx2-cxx::static-lib-cxx
         moteus
+        common
 )
 

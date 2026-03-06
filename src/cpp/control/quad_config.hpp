@@ -70,8 +70,8 @@ struct QuadConfig {
     }};
 
     // Kinematic Lengths
-    static constexpr double ABDUCTION_OFFSET = 0.04241 + 0.069;
-    static constexpr double L1  = 0.19425;
+    static constexpr double ABDUCTION_OFFSET = 0.102;
+    static constexpr double L1  = 0.19625;
     static constexpr double L2  = 0.140;
 
     // Default/Idle foot location

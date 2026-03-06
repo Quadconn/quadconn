@@ -12,13 +12,11 @@
 
 inline double deadzone(double input_joystick) {
     // hardcoded deadzone of 0.05 to prevent jitter
-    return (fabs(input_joystick) < 0.05f ? 0.0f : input_joystick);
+    return (fabs(input_joystick) < 0.05f ? 
+        0.0f : 
+        floor((input_joystick*100+0.5)/100));
 }
 
-inline double rescale(double input_float) {
-    // hardcoded value to scale from -1 to 1
-    return (input_float * 2.0f) - 1.0f;
-}
 
 int main() {
     JointAngles leftLegAngles;
@@ -32,17 +30,7 @@ int main() {
     /* END: NODE DECLARATION */
     QuadControl quad;
 
-    // TODO DR: Integrate remote controller to supply these commands instead of
-    // a static one here
 
-    // scale from [-1 1]
-    // 
-    // left stick modulates x-y Forward -> increase vel_x Down -> decrease vel_x
-    // Left -> increase vel_y, Right -> decrase vel_y
-
-
-
-    // 
     Command command = {
         .horizontal_velocity_x = 0.4, //  [-1,1] - => down, + => up
         .horizontal_velocity_y = -0.3, // [-1,1] - => right, + => left
@@ -62,7 +50,7 @@ int main() {
 
             // assigning velocities according to controller values
             command.horizontal_velocity_x = HORIZONTAL_MAX * deadzone(data_ref.ly);
-            command.horizontal_velocity_y = -VERTICAL_MAX *   deadzone(data_ref.lx);
+            command.horizontal_velocity_y = -VERTICAL_MAX  * deadzone(data_ref.lx);
         }
 
 

@@ -10,12 +10,7 @@
 #include "../common/motor_diagnostics.hpp"
 
 #define MOTOR_NUM  3
-#define GEAR_RATIO 9
 
-// Convert radians to turns
-inline double rad2turns(double radians) {
-    return GEAR_RATIO*(radians / (2.0 * M_PI));
-}
 
 int main(int argc, char** argv) {
     using namespace mjbots;
@@ -29,11 +24,11 @@ int main(int argc, char** argv) {
 
     // TODO: define once across motor interface and zeroing cpp files
     auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    //auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_b},
-        {5, bus_b},
-        {6, bus_b}
+        {4, bus_a},
+        {5, bus_a},
+        {6, bus_a}
     };
 
     // Initialize Controllers

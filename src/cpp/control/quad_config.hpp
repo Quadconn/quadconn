@@ -4,55 +4,48 @@
 
 #include <Eigen/Dense>
 
+#include "quad_common.hpp"
+
 // NOTE: All values follow SI units
 //  - distance/length -> meters
 //  - time -> seconds
 
-struct QuadConfig {
-    // Array sizes
-    static constexpr int LEG_COUNT   = 4;
-    static constexpr int PHASE_COUNT = 4;
-
+namespace quad::config {
     // Program Tick length
-    static constexpr double dt              = 0.01;
-    static constexpr int    dt_milli        = dt * 1E3;
+    inline constexpr double dt              = 0.01;
+    inline constexpr int    dt_milli        = dt * 1E3;
     // Time step to clamp height correction speed
-    static constexpr double z_time_constant = 0.02;
+    inline constexpr double z_time_constant = 0.02;
 
     // Minimum clearance between body and foot in z direction
-    static constexpr double z_clearance     = 0.07;
+    inline constexpr double z_clearance     = 0.07;
 
     // Swing proportional gains
-    static constexpr double alpha           = 0.5; // Positional
-    static constexpr double beta            = 0.5; // Rotational
+    inline constexpr double alpha           = 0.5; // Positional
+    inline constexpr double beta            = 0.5; // Rotational
 
     // Gait timings
-    static constexpr double overlap_time    = 0.10; // Duration where all feet on ground
-    static constexpr double swing_time      = 0.15; // Duration when only two diagonal feet on ground
-    static constexpr int overlap_ticks      = overlap_time / dt;
-    static constexpr int swing_ticks        = swing_time / dt;
-    static constexpr int stance_ticks       = (2 * overlap_ticks) + swing_ticks;
+    inline constexpr double overlap_time    = 0.10; // Duration where all feet on ground
+    inline constexpr double swing_time      = 0.15; // Duration when only two diagonal feet on ground
+    inline constexpr int overlap_ticks      = overlap_time / dt;
+    inline constexpr int swing_ticks        = swing_time / dt;
+    inline constexpr int stance_ticks       = (2 * overlap_ticks) + swing_ticks;
 
     // Total tick duration of a full gait (swings and overlaps)
-    static constexpr int total_gait_ticks = (2 * overlap_ticks) + (2 * swing_ticks);
-
-    // Array Indexing
-    static constexpr int FL = 0; // Front left
-    static constexpr int FR = 1; // Front right
-    static constexpr int BL = 2; // Back left
-    static constexpr int BR = 3; // Back right
+    inline constexpr int total_gait_ticks = (2 * overlap_ticks) + (2 * swing_ticks);
 
     // Contact modes
-    static constexpr int SWING  = 0;
-    static constexpr int STANCE = 1;
+    inline constexpr int SWING  = 0;
+    inline constexpr int STANCE = 1;
 
+    inline constexpr int PHASE_COUNT = 4;
     // Phase order and amount of ticks in each phase
-    static constexpr std::array<int, PHASE_COUNT> phase_ticks = {
+    inline constexpr std::array<int, PHASE_COUNT> phase_ticks = {
         overlap_ticks, swing_ticks, overlap_ticks, swing_ticks
     };
 
     // Foot contact mode (swing/stance) for each phase
-    static constexpr std::array<std::array<int, LEG_COUNT>, PHASE_COUNT> contact_phases = {{
+    inline constexpr std::array<std::array<int, quad::common::LEG_COUNT>, PHASE_COUNT> contact_phases = {{
         {STANCE, STANCE,    // Overlap
          STANCE, STANCE},
 
@@ -70,10 +63,35 @@ struct QuadConfig {
     }};
 
     // Kinematic Lengths
-    static constexpr double ABDUCTION_OFFSET = 0.102;
-    static constexpr double L1  = 0.19625;
-    static constexpr double L2  = 0.140;
+    inline constexpr double ABDUCTION_OFFSET = 0.102;
+    inline constexpr double L1               = 0.19625;
+    inline constexpr double L2               = 0.140;
+    inline constexpr double LEG_FB           = 0.35;     // Front-back distance from center of body to hip joint axis of rotation
+    inline constexpr double LEG_LR           = 0.125725; // Left-right distance from center of body to hip joint plane of rotation
 
-    // Default/Idle foot location
-    inline static const Eigen::Vector3d default_front_left_foot_location{0, ABDUCTION_OFFSET, -(L1 + (L2 / 2))};
+    // Abduction offsets per leg
+    inline constexpr std::array<double, quad::common::LEG_COUNT> ABDUCTION_OFFSETS = {
+         ABDUCTION_OFFSET,
+        -ABDUCTION_OFFSET,
+         ABDUCTION_OFFSET,
+        -ABDUCTION_OFFSET,
+    };
+
+    // Origins of each legs hip relative to center of body
+    inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> LEG_HIP_ORIGINS {
+        Eigen::Vector3d{ LEG_FB,  LEG_LR, 0},
+        Eigen::Vector3d{ LEG_FB, -LEG_LR, 0},
+        Eigen::Vector3d{-LEG_FB,  LEG_LR, 0},
+        Eigen::Vector3d{-LEG_FB, -LEG_LR, 0},
+    };
+
+    // Default/Idle foot locations relative to center of body
+    // TODO DR: Make the z location 0 for all
+    inline constexpr double DEFAULT_Z = -(L1 + (L2 / 2));
+    inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> DEFAULT_STANCE {
+        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , DEFAULT_Z},
+        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), DEFAULT_Z},
+        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , DEFAULT_Z},
+        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), DEFAULT_Z},
+    };
 };

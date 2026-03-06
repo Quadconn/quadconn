@@ -62,3 +62,10 @@ cd build
 ```
 In the future, there will be run.sh scripts on the top directory to execute all code
 at once, but running them individually allows each terminal to display debug info. 
+
+# Configuring Motor Controllers
+The file moteus_config.txt can be used to set the configuration for a motor. The only 
+configuration option that needs to be manually changed in tview is the can id.
+```bash
+moteus_tool --restore-config moteus_config.txt
+```

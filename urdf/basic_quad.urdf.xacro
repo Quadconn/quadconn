@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<robot name="basic_quad" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+
+<!-- Variable Definitions -->
+<xacro:property name="thigh_length" value="0.22550"/>
+<xacro:property name="thigh_offset" value="0.02300"/>
+
+<xacro:property name="calf_length"  value="0.19625"/>
+<xacro:property name="calf_offset"  value="0.06300"/>
+
+<xacro:property name="foot_length"  value="0.14000"/>
+<xacro:property name="foot_offset"  value="0.01600"/>
+
+<xacro:property name="leg_fb"  value="0.35"/>
+<xacro:property name="leg_lr"  value="0.125725"/>
+
+
+<!-- Helper Macros -->
+<xacro:macro name="box_link" params="name visual_origin visual_size">
+    <link name="${name}">
+        <visual>
+            <origin xyz="${visual_origin}" rpy="0 0 0"/>
+            <geometry>
+                <box size="${visual_size}"/>
+            </geometry>
+            <material name="blue">
+                <color rgba="0 0 1 1"/>
+            </material>
+        </visual>
+
+        <collision>
+            <origin xyz="${visual_origin}" rpy="0 0 0"/>
+            <geometry>
+                <box size="${visual_size}"/>
+            </geometry>
+        </collision>
+    </link>
+</xacro:macro>
+
+<xacro:macro name="revolute_joint" params="name parent child origin axis">
+    <joint name="${name}" type="revolute">
+        <parent link="${parent}"/>
+        <child  link="${child}"/>
+
+        <origin xyz="${origin}" rpy="0 0 0"/>
+
+        <axis xyz="${axis}"/>
+
+        <limit lower="-3.14" upper="3.14" effort="1" velocity="1"/>
+
+    </joint>
+</xacro:macro>
+
+<xacro:macro name="leg3dof" params="prefix parent hip_origin ysign xsign">
+
+    <xacro:box_link
+        name="${prefix}_thigh"
+        visual_origin="${xsign * thigh_length/2} 0.0 0.0"
+        visual_size="${thigh_length} 0.05 0.05"/>
+
+    <xacro:box_link
+        name="${prefix}_calf"
+        visual_origin="0.0 0.0 ${-calf_length/2}"
+        visual_size="0.05 0.05 ${calf_length}"/>
+
+    <xacro:box_link
+        name="${prefix}_foot"
+        visual_origin="0.0 0.0 ${-foot_length/2}"
+        visual_size="0.05 0.05 ${foot_length}"/>
+
+    <xacro:revolute_joint
+        name="${prefix}_hip_roll"
+        parent="${parent}"
+        child="${prefix}_thigh"
+        origin="${hip_origin}"
+        axis="${xsign * 1} 0 0"/>
+
+    <xacro:revolute_joint
+        name="${prefix}_hip_pitch"
+        parent="${prefix}_thigh"
+        child="${prefix}_calf"
+        origin="${xsign * thigh_length} ${ysign * thigh_offset} 0.0"
+        axis="0 ${ysign * 1} 0"/>
+
+    <xacro:revolute_joint
+        name="${prefix}_knee_pitch"
+        parent="${prefix}_calf"
+        child="${prefix}_foot"
+        origin="0.0 ${ysign * calf_offset} ${-calf_length}"
+        axis="0 ${ysign * 1} 0"/>
+
+</xacro:macro>
+
+<!-- Actual URDF Definitions -->
+
+<!-- Link/Joint Definitions -->
+<xacro:box_link
+    name="body"
+    visual_origin= "0.0 0.0 0.0"
+    visual_size="${leg_fb * 2} ${leg_lr * 2} 0.05"/>
+
+<xacro:leg3dof
+    prefix="fl"
+    parent="body"
+    hip_origin="${leg_fb - thigh_length} ${leg_lr} 0.0"
+    ysign="1"
+    xsign="1"/>
+
+<xacro:leg3dof
+    prefix="fr"
+    parent="body"
+    hip_origin="${leg_fb - thigh_length} ${-leg_lr} 0.0"
+    ysign="-1"
+    xsign="1"/>
+
+<xacro:leg3dof
+    prefix="bl"
+    parent="body"
+    hip_origin="${-leg_fb + thigh_length} ${leg_lr} 0.0"
+    ysign="1"
+    xsign="-1"/>
+
+<xacro:leg3dof
+    prefix="br"
+    parent="body"
+    hip_origin="${-leg_fb + thigh_length} ${-leg_lr} 0.0"
+    ysign="-1"
+    xsign="-1"/>
+
+</robot>

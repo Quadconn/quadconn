@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     auto diagnostic_publisher = make_publisher<MotorDiagnosticsArray>
         (make_service<MotorDiagnosticsArray>("MotorDiagnosticsArray", motor_node));
     auto angle_subscriber = make_subscriber<BodyJointAngles>
-        (make_service<BodyJointAngles>("JointAngles", motor_node));
+        (make_service<BodyJointAngles>("BodyJointAngles", motor_node));
 
     const bb::Duration node_duration = bb::Duration::from_millis(UPDATE_RATE_MS);
     /* END: BRACKET GUARD -- Init Node */
@@ -131,9 +131,9 @@ int main(int argc, char** argv) {
         // receiving values from JointAngles struct
         target_val = ipc_receive(angle_subscriber).value_or(target_val);
 
+        std::cout << target_val;
         //  build the CAN frames using the latest targets
         for (size_t i = 0; i < controllers.size(); ++i) {
-
             double angle_cmd = parse_angle(i, target_val);
             cmd.position = rad2turns(angle_cmd);
             cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 

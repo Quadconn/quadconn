@@ -9,7 +9,7 @@
 #include "moteus.h"
 #include "../common/motor_diagnostics.hpp"
 
-#define MOTOR_NUM  3
+#define MOTOR_NUM  6
 
 
 int main(int argc, char** argv) {

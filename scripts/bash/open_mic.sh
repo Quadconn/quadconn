@@ -1,0 +1,1 @@
+gst-launch-1.0 -v alsasrc device=hw:0 !     audioconvert !     audioresample !     "audio/x-raw,rate=48000,channels=1" !     opusenc bitrate=64000 !     rtpopuspay !     udpsink host=100.119.158.85 port=3004

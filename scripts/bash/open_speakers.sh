@@ -1,0 +1,1 @@
+gst-launch-1.0 -v udpsrc port=3005 !     "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96" !     rtpopusdepay !     opusdec !     audioconvert !     audioresample !     alsasink device=hw:1

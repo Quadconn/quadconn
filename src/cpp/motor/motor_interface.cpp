@@ -19,19 +19,38 @@
 #define MOTOR_NUM        6
 
 inline double parse_angle(int index, const BodyJointAngles& target_val) {
-    // breaks up index into legs 0, 1, 2, 3
-    int leg_index = index/3;
-    // within each leg, 0->hip_roll, 1-> hip_pitch, 2->knee_pitch
-    int joint_index = index%3;
-
-    // i.e. if doing CAN_ID 6, index = 5, corresponds to leg 1, knee_pitch 
-    switch (joint_index) { 
-        case 0: return target_val.body_joint_angles[leg_index].hip_roll;
-        case 1: return target_val.body_joint_angles[leg_index].hip_pitch;
-        case 2: return target_val.body_joint_angles[leg_index].knee_pitch;
-        default: return 0.0; // Will never hit due to modulo 3
+    switch (index) {
+        case(0):
+            return target_val.body_joint_angles[quad::common::FR].hip_roll;
+        case(1):
+            return target_val.body_joint_angles[quad::common::FR].hip_pitch;
+        case(2):
+            return target_val.body_joint_angles[quad::common::FR].knee_pitch;
+        case(3):
+            return target_val.body_joint_angles[quad::common::FL].hip_roll;
+        case(4):
+            return target_val.body_joint_angles[quad::common::FL].hip_pitch;
+        case(5):
+            return target_val.body_joint_angles[quad::common::FL].knee_pitch;
+        default:
+            return 0.0;
     }
+
 }
+
+// struct id_fdcan {
+//     int id;
+//     std::shared_ptr<mjbots::moteus::Fdcanusb> bus;
+// };
+
+// std::array<id_fdcan, MOTOR_NUM> id_to_bus {{
+//     {1, bus_a},
+//     {2, bus_a},
+//     {3, bus_a},
+//     {4, bus_b},
+//     {5, bus_b},
+//     {6, bus_b}
+// }};
 
 int main(int argc, char** argv) {
     using namespace mjbots;
@@ -42,14 +61,17 @@ int main(int argc, char** argv) {
     // change usb-id depending on motor id used, map motor controller node ids to bus
     const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
     const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
-    const auto bus_c = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_[INSERTCODE]-if00");
+    // const auto bus_c = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_[INSERTCODE]-if00");
+
+
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {1, bus_a}, // hip_roll  0
-        {2, bus_a}, // hip_pitch 0
-        {3, bus_a}, // hip_knee  0
-        {4, bus_b}, // hip_roll  1
-        {5, bus_b}, // hip_pitch 1
-        {6, bus_b} // hip_knee  1
+        {1, bus_b}, // hip_roll   FR - 1
+        {2, bus_b}, // hip_pitch  FR - 1
+        {3, bus_b}, //  hip_knee  FR - 1
+        {4, bus_a}, // hip_roll   FL - 0
+        {5, bus_a}, // hip_pitch  FL - 0
+        {6, bus_a}  // hip_knee   FL - 0
+
         // {7, bus_a},
         // {8, bus_b},
         // {9, bus_c},
@@ -112,12 +134,11 @@ int main(int argc, char** argv) {
         //  build the CAN frames using the latest targets
         for (size_t i = 0; i < controllers.size(); ++i) {
 
-            double angle_cmd = NAN;
             double angle_cmd = parse_angle(i, target_val);
-
             cmd.position = rad2turns(angle_cmd);
             cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
             auto frame = controllers[i]->MakePosition(cmd);
+            // for commmands, map CAN-ID with frame
             bus_cmd[id_to_bus[controllers[i]->options().id]].push_back(frame);
         }
 

@@ -13,4 +13,8 @@ PyQt6
 numpy
 opencv-python-headless
 ultralytics
-PyGObject
+# PyGObject # this won't load on the edge pc b/c it doesn't have an opengl driver (headless installation)
+
+
+
+evdev   # controller

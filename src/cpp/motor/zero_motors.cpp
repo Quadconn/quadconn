@@ -23,12 +23,15 @@ int main(int argc, char** argv) {
      rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0)};
 
     // TODO: define once across motor interface and zeroing cpp files
-    auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    //auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
+    const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
+        {1, bus_a},
+        {2, bus_a},
+        {3, bus_a},
+        {4, bus_b},
+        {5, bus_b},
+        {6, bus_b}
     };
 
     // Initialize Controllers

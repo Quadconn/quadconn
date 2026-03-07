@@ -8,14 +8,30 @@
 
 #include "moteus.h"
 #include "joint_angles.hpp"
+#include "quad_common.hpp"
 #include "motor_diagnostics.hpp"
 #include "quad_ipc.hpp"
 
 
 #include "iox2/iceoryx2.hpp"
 
-#define UPDATE_RATE_MS 5
-#define MOTOR_NUM  3
+#define UPDATE_RATE_MS   5
+#define MOTOR_NUM        6
+
+inline double parse_angle(int index, const BodyJointAngles& target_val) {
+    // breaks up index into legs 0, 1, 2, 3
+    int leg_index = index/3;
+    // within each leg, 0->hip_roll, 1-> hip_pitch, 2->knee_pitch
+    int joint_index = index%3;
+
+    // i.e. if doing CAN_ID 6, index = 5, corresponds to leg 1, knee_pitch 
+    switch (joint_index) { 
+        case 0: return target_val.body_joint_angles[leg_index].hip_roll;
+        case 1: return target_val.body_joint_angles[leg_index].hip_pitch;
+        case 2: return target_val.body_joint_angles[leg_index].knee_pitch;
+        default: return 0.0; // Will never hit due to modulo 3
+    }
+}
 
 int main(int argc, char** argv) {
     using namespace mjbots;
@@ -25,14 +41,20 @@ int main(int argc, char** argv) {
     
     // change usb-id depending on motor id used, map motor controller node ids to bus
     const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    //const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    const auto bus_c = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_[INSERTCODE]-if00");
     std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
-        // {4, bus_b},
-        // {5, bus_b},
-        // {6, bus_b}
+        {1, bus_a}, // hip_roll  0
+        {2, bus_a}, // hip_pitch 0
+        {3, bus_a}, // hip_knee  0
+        {4, bus_b}, // hip_roll  1
+        {5, bus_b}, // hip_pitch 1
+        {6, bus_b} // hip_knee  1
+        // {7, bus_a},
+        // {8, bus_b},
+        // {9, bus_c},
+        // {10,bus_c},
+        // {11,bus_c},
     };
 
     /* START: BRACKET GUARD -- Init Node */
@@ -40,8 +62,8 @@ int main(int argc, char** argv) {
 
     auto diagnostic_publisher = make_publisher<MotorDiagnosticsArray>
         (make_service<MotorDiagnosticsArray>("MotorDiagnosticsArray", motor_node));
-    auto angle_subscriber = make_subscriber<JointAngles>
-        (make_service<JointAngles>("JointAngles", motor_node));
+    auto angle_subscriber = make_subscriber<BodyJointAngles>
+        (make_service<BodyJointAngles>("JointAngles", motor_node));
 
     const bb::Duration node_duration = bb::Duration::from_millis(UPDATE_RATE_MS);
     /* END: BRACKET GUARD -- Init Node */
@@ -63,7 +85,7 @@ int main(int argc, char** argv) {
 
 
     // Prepare batch of commands
-    JointAngles target_val = {.hip_roll=0.0, .hip_pitch=0.0, .knee_pitch=0.0};
+    BodyJointAngles target_val{};
 
     // handles moteus sending, query, and receiving data structures
     moteus::PositionMode::Command cmd;
@@ -85,18 +107,13 @@ int main(int argc, char** argv) {
         replies.clear();
 
         // receiving values from JointAngles struct
-        auto sample_r = angle_subscriber.receive().value();
-        if (sample_r.has_value()) {
-            target_val.hip_roll =   sample_r.value().payload().hip_roll;
-            target_val.hip_pitch =  sample_r.value().payload().hip_pitch;
-            target_val.knee_pitch = sample_r.value().payload().knee_pitch;
-        }
+        target_val = ipc_receive(angle_subscriber).value_or(target_val);
 
         //  build the CAN frames using the latest targets
         for (size_t i = 0; i < controllers.size(); ++i) {
-            double angle_cmd = (i == 0) ? target_val.hip_roll :
-                               (i == 1) ? target_val.hip_pitch :
-                                          target_val.knee_pitch;
+
+            double angle_cmd = NAN;
+            double angle_cmd = parse_angle(i, target_val);
 
             cmd.position = rad2turns(angle_cmd);
             cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 

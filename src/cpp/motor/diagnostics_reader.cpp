@@ -12,8 +12,8 @@ int main(int argc, char** argv) {
     auto node = make_node("diagnostics");
 
 
-    auto angle_subscriber = make_subscriber<JointAngles>
-           (make_service<JointAngles>("JointAngles", node));
+    auto angle_subscriber = make_subscriber<BodyJointAngles>
+           (make_service<BodyJointAngles>("BodyJointAngles", node));
     // auto game_subscriber = make_subscriber<GamepadData>
     //        (make_service<GamepadData>("GamepadData", node));
     /* END: BRACKET GUARD -- INIT NODE */

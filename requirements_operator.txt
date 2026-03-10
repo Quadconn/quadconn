@@ -1,0 +1,8 @@
+# Operator Required Packages/Libraries
+PyQt6
+numpy
+opencv-python-headless
+ultralytics
+torch
+torchvision
+PyGObject

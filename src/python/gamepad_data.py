@@ -1,4 +1,5 @@
 import ctypes
+
 # --- The C-Compatible Data Structure ---
 class GamepadData(ctypes.Structure):
     _fields_ = [
@@ -29,3 +30,4 @@ class GamepadData(ctypes.Structure):
     @staticmethod
     def type_name() -> str:
         return "GamepadData"
+

@@ -3,6 +3,11 @@ from evdev import ecodes
 import threading
 import iceoryx2 as iox2
 from gamepad_data import GamepadData
+from system_logic import SystemLogic, to_event_id
+
+
+
+
 
 # --- The Controller Logic ---
 class ControllerState:
@@ -11,7 +16,7 @@ class ControllerState:
         'A': 304, 'B': 305, 'X': 307, 'Y': 308,
         'LB': 310, 'RB': 311,
         'LS_CLK': 317, 'RS_CLK': 318,
-        'Select': 314, 'START': 315, 'GUIDE': 316
+        'SELECT': 314, 'START': 315, 'GUIDE': 316
     }
 
     def __init__(self, device_path=None):
@@ -107,7 +112,7 @@ class ControllerState:
             Y=btn('Y'),
             Home=btn('GUIDE'),
             Start=btn('START'),
-            Select=btn('Select'),
+            Select=btn('SELECT'),
             L3=btn('LS_CLK'),
             R3=btn('RS_CLK'),
             LB=btn('LB'),
@@ -139,24 +144,43 @@ if __name__ == "__main__":
     publisher = service.publisher_builder().create()
 
     # create event-based node
+    start_motors = iox2.EventId.new(1)
+    stop_motors = iox2.EventId.new(2)
 
+    event_service = (
+        node
+        .service_builder(iox2.ServiceName.new("SystemLogic"))
+        .event()
+        .open_or_create()
+    )
 
+    notifier = event_service.notifier_builder().create() 
 
     try:
         while True:
             node.wait(cycle_time)
 
-            # constructing directly in sample, cannot print
+            # initialize data to make notifiers
             sample = publisher.loan_uninit()
+            data = controller.read()
             if sample is not None:
                 sample = sample.write_payload(
-                    controller.read()
+                    data 
                 )
                 sample.send()
-                print(f"\r{controller.read()}", end="")
+                # print(f"\r{data}", end="")
             else:
                 print("could not loan memory")
             
+            if data.Start:
+                notifier.notify_with_custom_event_id(
+                    to_event_id(SystemLogic.StartMotors))
+
+            if data.Select:
+                notifier.notify_with_custom_event_id(
+                    to_event_id(SystemLogic.KillMotors))
+
+
             # debug remove later
             
             

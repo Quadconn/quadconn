@@ -58,19 +58,13 @@ inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target)
 }
 
 
-
-
 int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
 
     
     // change usb-id depending on motor id used, map motor controller node ids to bus
-    try {
-        
-    } catch(std::runtime_error) {
-        std::cout << "bus_a is not connected\n";
-    }
+    // remember to update bus_c to be an actual usb
     const auto bus_a = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");    
     const auto bus_b = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
     const auto bus_c = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_[INSERTCODE]-if00");
@@ -93,7 +87,7 @@ int main(int argc, char** argv) {
         (make_service<BodyJointAngles>("BodyJointAngles", motor_node));
     auto system_listener = make_listener
         (make_event("SystemLogic", motor_node));
-    const bb::Duration node_duration = bb::Duration::from_millis(UPDATE_RATE_MS);
+        
     /* END: BRACKET GUARD -- Init Node */
 
 

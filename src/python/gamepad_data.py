@@ -16,7 +16,7 @@ class GamepadData(ctypes.Structure):
         ("Y", ctypes.c_int),
         ("Home", ctypes.c_int),
         ("Start", ctypes.c_int),
-        ("Back", ctypes.c_int),
+        ("Select", ctypes.c_int),
         ("L3", ctypes.c_int),
         ("R3", ctypes.c_int),
         ("RB", ctypes.c_int),
@@ -24,7 +24,7 @@ class GamepadData(ctypes.Structure):
     ]
 
     def __str__(self):
-        return f"GamepadData {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
+        return f"GamepadData {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Select: {self.Select}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
 
     @staticmethod
     def type_name() -> str:

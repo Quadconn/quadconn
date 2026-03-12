@@ -11,7 +11,7 @@ class ControllerState:
         'A': 304, 'B': 305, 'X': 307, 'Y': 308,
         'LB': 310, 'RB': 311,
         'LS_CLK': 317, 'RS_CLK': 318,
-        'BACK': 314, 'START': 315, 'GUIDE': 316
+        'Select': 314, 'START': 315, 'GUIDE': 316
     }
 
     def __init__(self, device_path=None):
@@ -107,7 +107,7 @@ class ControllerState:
             Y=btn('Y'),
             Home=btn('GUIDE'),
             Start=btn('START'),
-            Back=btn('BACK'),
+            Select=btn('Select'),
             L3=btn('LS_CLK'),
             R3=btn('RS_CLK'),
             LB=btn('LB'),
@@ -138,6 +138,10 @@ if __name__ == "__main__":
     )
     publisher = service.publisher_builder().create()
 
+    # create event-based node
+
+
+
     try:
         while True:
             node.wait(cycle_time)
@@ -149,7 +153,7 @@ if __name__ == "__main__":
                     controller.read()
                 )
                 sample.send()
-                # print(f"\r{data}", end="")
+                print(f"\r{controller.read()}", end="")
             else:
                 print("could not loan memory")
             

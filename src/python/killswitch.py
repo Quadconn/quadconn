@@ -20,9 +20,13 @@ if __name__ == "__main__":
             
             read_data = quad_ipc.ipc_receive(subscriber)
             
-            
             # debug remove later
-            
+            if read_data is not None:
+                if(read_data.contents.Start):
+                    print("pressed start")
+            else:
+                break
+                #
             
     except KeyboardInterrupt:
         print("\nStopping cleanly...")

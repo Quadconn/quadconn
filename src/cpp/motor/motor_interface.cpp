@@ -23,6 +23,7 @@
 #define BUS_CTRL_NUM     4
 
 std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port);
+inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target);
 
 // used to define mapping
 struct MotorDef {
@@ -40,22 +41,8 @@ struct BusGroup {
     std::vector<int> legs;          
     std::vector<int> joint_types;   
     std::vector<mjbots::moteus::CanFdFrame> frames;
+    std::vector<mjbots::moteus::CanFdFrame> replies;
 };
-
-inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target) {
-    // retrieve index of leg joint, as well as specific leg
-    const auto& leg_data = target.body_joint_angles[leg];
-    switch (joint_idx) {
-        case(0): 
-            return leg_data.hip_roll;
-        case(1):
-            return leg_data.hip_pitch;
-        case(2):
-            return leg_data.knee_pitch;
-        default:
-            return 0.0;
-    }
-}
 
 
 int main(int argc, char** argv) {
@@ -87,7 +74,7 @@ int main(int argc, char** argv) {
         (make_service<BodyJointAngles>("BodyJointAngles", motor_node));
     auto system_listener = make_listener
         (make_event("SystemLogic", motor_node));
-        
+
     /* END: BRACKET GUARD -- Init Node */
 
 
@@ -117,26 +104,29 @@ int main(int argc, char** argv) {
     // will now use bus_groups for all communication (no more map)
     std::vector<BusGroup> bus_groups;
     for (auto& [bus, group] : bus_groups_map) {
+        if (bus == nullptr) {
+            std::cout << "bus " << bus << "not connnected, program exiting early\n";
+            return 1;
+        }
         bus_groups.push_back(std::move(group));
     }
 
 
     // Clear faults
     for(auto& group : bus_groups) {
-        for(auto& c : group.controllers) c->SetStop();
+        for(auto& c : group.controllers) {c->SetStop();}
+        group.replies.reserve(BUS_CTRL_NUM);
     }
 
     // Prepare batch of commands
     BodyJointAngles target_val{};
     // handles moteus sending, query, and receiving data structures
     moteus::PositionMode::Command cmd;
-    // TODO: change maps and vectors to static arrays 
-    std::vector<moteus::CanFdFrame> replies;
-    replies.reserve(MOTOR_NUM);
 
     // Execution loop
     std::cout << "starting motor loop\n";
     // attempt to receive value on loop duration
+
     while (loop_waitms(UPDATE_RATE_MS, motor_node)) { 
         
         auto event = system_listener.try_wait_one();
@@ -152,12 +142,9 @@ int main(int argc, char** argv) {
         // receiving values from JointAngles struct
         target_val = ipc_receive(angle_subscriber).value_or(target_val);
 
-        replies.clear();
-
         //  build the CAN frames using the latest targets 
         //  grouped by buses
         for (auto& group : bus_groups) {
-            
             // Build frames for just this specific bus
             for (size_t i = 0; i < group.controllers.size(); ++i) {
                 double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
@@ -165,20 +152,23 @@ int main(int argc, char** argv) {
                 cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
                 group.frames[i] = group.controllers[i]->MakePosition(cmd);
             }
+            group.replies.clear();
+            group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
         }
-
-
+        
         // Loan default-constructed memory directly from the shared pool
         auto sample_s_opt = diagnostic_publisher.loan();
         if (sample_s_opt.has_value()) {
             auto sample_s = std::move(sample_s_opt.value());
-            
-            for (const auto& frame : replies) {
-                auto result = moteus::Query::Parse(frame.data, frame.size);
-                int target_idx = frame.source - 1; 
-                
-                if (target_idx >= 0 && target_idx < MOTOR_NUM) {
-                    sample_s.payload_mut().motor_instance[target_idx] = motor_info::make_diag(result);
+
+            for (const auto& group : bus_groups) {
+                for (const auto& frame: group.replies) {
+                    auto result = moteus::Query::Parse(frame.data, frame.size);
+                    int target_idx = frame.source - 1; 
+                    
+                    if (target_idx >= 0 && target_idx < MOTOR_NUM) {
+                        sample_s.payload_mut().motor_instance[target_idx] = motor_info::make_diag(result);
+                    }
                 }
             }
             // Send the sample off to any subscribers
@@ -207,5 +197,20 @@ std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port) {
     } catch (const std::exception& e) {
         std::cout << "[ERROR] Failed to init " << port << ": " << e.what() << "\n";
         return nullptr; // Fallback to simulation
+    }
+}
+
+inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target) {
+    // retrieve index of leg joint, as well as specific leg
+    const auto& leg_data = target.body_joint_angles[leg];
+    switch (joint_idx) {
+        case(0): 
+            return leg_data.hip_roll;
+        case(1):
+            return leg_data.hip_pitch;
+        case(2):
+            return leg_data.knee_pitch;
+        default:
+            return 0.0;
     }
 }

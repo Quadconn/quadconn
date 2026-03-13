@@ -22,6 +22,13 @@ except Exception as e:
     # Safe to ignore on macOS or environments without Torch installed
     print(f"Global Setup Note: {e}")
 
+# Configuration Constants
+TELEMETRY_PORT = 808
+VIDEO_PORT = 5000
+MIC_TO_SPEAKER_PORT = 3004
+SPEAKER_TO_MIC_PORT = 3005
+YOLO_WEIGHTS = 'yolov8n.pt'
+
 ## Standard Imports ##
 import socket
 import subprocess
@@ -60,7 +67,7 @@ class AudioReceiveThread(QThread):
     def run(self):
         # GStreamer Launch String -> receives OPUS audio via UDP on Port 3004 with a 100ms jitter buffer for stability
         gst_str = (
-            "udpsrc port=3004 ! "
+            f"udpsrc port={MIC_TO_SPEAKER_PORT} ! "
             "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96 ! "
             "rtpjitterbuffer latency=100 ! rtpopusdepay ! opusdec ! audioconvert ! audioresample ! "
             "volume name=vol_control volume=1.0 ! autoaudiosink sync=false"
@@ -90,7 +97,7 @@ class AudioSendThread(QThread):
         gst_str = (
             "osxaudiosrc ! audioconvert ! audioresample ! "
             "opusenc bitrate=64000 ! rtpopuspay ! "
-            f"udpsink host={self.robot_ip} port=3005"
+            f"udpsink host={self.robot_ip} port={SPEAKER_TO_MIC_PORT}"
         )
         self.pipeline = Gst.parse_launch(gst_str)
         self.pipeline.set_state(Gst.State.PLAYING)
@@ -121,12 +128,12 @@ class TelemetryReceiver(QThread):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(1.0)
         try:
-            sock.bind(("0.0.0.0", 808))
+            sock.bind(("0.0.0.0", TELEMETRY_PORT))
         except Exception as e:
             print(f"Socket Bind Error: {e}")
        
         expected_size = sizeof(MotorDiagnosticsArray)
-        print("Telemetry Receiver Active (Port 808)")
+        print(f"Telemetry Receiver Active {TELEMETRY_PORT}")
 
         while self.running:
             try:
@@ -167,7 +174,7 @@ class InferenceWorker(QThread):
         try:
             from ultralytics import YOLO
             print("Loading YOLOv8 weights...")
-            self.model = YOLO('yolov8n.pt')
+            self.model = YOLO(YOLO_WEIGHTS)
            
             # Final run to ensure the thread has access to the global engine
             dummy_frame = np.zeros((160, 160, 3), dtype=np.uint8)
@@ -232,7 +239,7 @@ class VideoThread(QThread):
 
         # GStreamer Launch String: Receives H.264 via UDP on Port 5000
         gst_str = (
-            "udpsrc port=5000 ! "
+            f"udpsrc port={VIDEO_PORT} ! "
             "application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264,payload=(int)96 ! "
             "rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
             "video/x-raw,format=BGR ! appsink name=sink emit-signals=True sync=false"
@@ -265,12 +272,12 @@ class VideoThread(QThread):
         launch_audio_send = (
             f"gst-launch-1.0 alsasrc device=hw:WEBCAM ! audioconvert ! audioresample ! "
             f"\\\"audio/x-raw,rate=48000,channels=1\\\" ! opusenc bitrate=64000 ! rtpopuspay ! "
-            f"udpsink host={self.host_ip} port=3004"
+            f"udpsink host={self.host_ip} port={MIC_TO_SPEAKER_PORT}"
         )
         
         # Host -> Robot Speakers (Port 3005)
         launch_audio_recv = (
-            f"gst-launch-1.0 udpsrc port=3005 ! "
+            f"gst-launch-1.0 udpsrc port={SPEAKER_TO_MIC_PORT} ! "
             f"\\\"application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96\\\" ! "
             f"rtpopusdepay ! opusdec ! audioconvert ! audioresample ! alsasink device=hw:UACDemoV10"
         )

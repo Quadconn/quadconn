@@ -1,0 +1,1 @@
+./../../.venv/bin/python3.12 ../../src/python/udp_gamepad_receiver.py

@@ -1,0 +1,1 @@
+./../../build/src/cpp/motor/diagnostics_reader

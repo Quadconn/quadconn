@@ -2,33 +2,38 @@
 #include "gamepad_data.hpp"
 #include "quad_ipc.hpp"
 #include "joint_angles.hpp"
-
+#include "system_logic.hpp"
 #define SAMPLE_RATE_MS 50
+
 int main(int argc, char** argv) {
     using namespace iox2;
 
-    constexpr bb::Duration UPDATE_RATE = bb::Duration::from_secs(1);
+
     /* START: BRACKET GUARD -- INIT NODE */
     auto node = make_node("diagnostics");
 
 
     auto angle_subscriber = make_subscriber<BodyJointAngles>
            (make_service<BodyJointAngles>("BodyJointAngles", node));
-    // auto game_subscriber = make_subscriber<GamepadData>
-    //        (make_service<GamepadData>("GamepadData", node));
-    /* END: BRACKET GUARD -- INIT NODE */
-
+    auto system_listener = make_listener(make_event("SystemLogic", node));
+    
     while(loop_waitms(SAMPLE_RATE_MS, node)) {
-        
-        
-        // receiving joystick data
-        auto received_val = ipc_receive(angle_subscriber);
-        if (received_val.has_value()) {
-            // pull value from IPC_Receive
-            auto& data_ref = received_val.value();
-            std::cout << data_ref << std::endl;
+  
+        auto event = system_listener.try_wait_one();
+        // catch stop signal
+        if(event.has_value()) {
+            auto event_val = event.value();
+            if (event_val.has_value()) {
+                if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
+                        std::cout << "stopping diagnostics loop";
+                        break;
+                }
+                if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
+                        std::cout << "idk u pressed start or something";
+                }                
+            }
         }
-   
     }
+
     return 0;
 }

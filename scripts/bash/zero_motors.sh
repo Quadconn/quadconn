@@ -1,0 +1,1 @@
+./../..//build/src/cpp/motor/zero_motors

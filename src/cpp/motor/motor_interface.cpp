@@ -19,7 +19,6 @@
 
 #define UPDATE_RATE_MS   5
 #define MOTOR_NUM        12
-
 #define BUS_CTRL_NUM     4
 
 std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port);
@@ -37,11 +36,11 @@ struct MotorDef {
 // each bus will contain a vector of its own controllers, legs, joint types, and frames
 struct BusGroup {
     std::shared_ptr<mjbots::moteus::Fdcanusb> bus;
-    std::vector<std::shared_ptr<mjbots::moteus::Controller>> controllers;
-    std::vector<int> legs;          
-    std::vector<int> joint_types;   
-    std::vector<mjbots::moteus::CanFdFrame> frames;
-    std::vector<mjbots::moteus::CanFdFrame> replies;
+    std::vector<std::shared_ptr<mjbots::moteus::Controller>> controllers;   // vectors
+    std::vector<int> legs;                                                  // defined
+    std::vector<int> joint_types;                                           // here
+    std::vector<mjbots::moteus::CanFdFrame> frames;                         // not resized
+    std::vector<mjbots::moteus::CanFdFrame> replies;                        // during loop
 };
 
 
@@ -105,7 +104,7 @@ int main(int argc, char** argv) {
     std::vector<BusGroup> bus_groups;
     for (auto& [bus, group] : bus_groups_map) {
         if (bus == nullptr) {
-            std::cout << "bus " << bus << "not connnected, program exiting early\n";
+            std::cout << "bus in warning not connnected, program exiting early\n";
             return 1;
         }
         bus_groups.push_back(std::move(group));
@@ -113,9 +112,12 @@ int main(int argc, char** argv) {
 
 
     // Clear faults
-    for(auto& group : bus_groups) {
-        for(auto& c : group.controllers) {c->SetStop();}
-        group.replies.reserve(BUS_CTRL_NUM);
+    for (auto& group : bus_groups) {
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
     }
 
     // Prepare batch of commands
@@ -131,12 +133,13 @@ int main(int argc, char** argv) {
         
         auto event = system_listener.try_wait_one();
         // catch stop signal
-        if (event.has_value()) {
+        if (event.has_value() && event.value().has_value()) {
             if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
                     std::cout << "stopping motor_controller process";
                     break;
             }
         }
+
         
 
         // receiving values from JointAngles struct
@@ -178,7 +181,11 @@ int main(int argc, char** argv) {
     // End safely,
     // Clear faults
     for (auto& group : bus_groups) {
-        for (auto& c : group.controllers) { c->SetStop(); }
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
     }
     return 0;
 }
@@ -188,7 +195,7 @@ int main(int argc, char** argv) {
 // Attempts to open the CAN bus. Returns nullptr if it fails or is missing.
 std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port) {
     if (!std::filesystem::exists(port)) {
-        std::cout << "[WARN] Hardware missing at " << port << ". Defaulting to Simulation Mode.\n";
+        std::cout << "[WARN] Hardware missing at " << port << ". Program will not run.\n";
         return nullptr;
     }
     

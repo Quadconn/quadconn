@@ -91,13 +91,6 @@ def main():
                     print("Warning: Could not loan shared memory from iceoryx2")
 
                 # 4. Trigger System Events based on controller input
-                if data.Start:
-                    notifier.notify_with_custom_event_id(to_event_id(SystemLogic.StartMotors))
-                    
-
-                if data.Select:
-                    notifier.notify_with_custom_event_id(to_event_id(SystemLogic.KillMotors))
-                    
 
             else:
                 print(f"Warning: Received packet of {len(payload)} bytes, expected {struct_size}.")

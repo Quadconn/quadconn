@@ -156,7 +156,11 @@ if __name__ == "__main__":
 
     notifier = event_service.notifier_builder().create() 
 
+
+
     try:
+
+        prev_data = controller.read()
         while True:
             node.wait(cycle_time)
 
@@ -172,6 +176,7 @@ if __name__ == "__main__":
             else:
                 print("could not loan memory")
             
+            # notifiers
             if data.Start:
                 notifier.notify_with_custom_event_id(
                     to_event_id(SystemLogic.StartMotors))
@@ -180,7 +185,7 @@ if __name__ == "__main__":
                 notifier.notify_with_custom_event_id(
                     to_event_id(SystemLogic.KillMotors))
 
-
+            prev_data = data
             # debug remove later
             
             

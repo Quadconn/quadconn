@@ -21,6 +21,10 @@
 #define MOTOR_NUM        12
 #define BUS_CTRL_NUM     4
 
+#define KNEE_IDX             0
+#define HIP_PITCH_IDX        1
+#define HIP_ROLL_IDX         2
+
 std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port);
 inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target);
 
@@ -53,15 +57,15 @@ int main(int argc, char** argv) {
     // remember to update bus_c to be an actual usb
     const auto bus_a = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");    
     const auto bus_b = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
-    const auto bus_c = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_[INSERTCODE]-if00");
+    const auto bus_c = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_6A9ABCBD-if00");
 
     
     std::array<MotorDef, MOTOR_NUM> robot_config = {{
-        // implicitly tie joint_idx = 2 -> knee, joint_idx = 1 -> hip_pitch, joint_idx = 0 -> hip_roll
-        {1,  bus_b, quad::common::FR, 0}, {2,  bus_b, quad::common::FR, 1}, {3,  bus_a, quad::common::FR, 2},
-        {4,  bus_b, quad::common::FL, 0}, {5,  bus_b, quad::common::FL, 1}, {6,  bus_a, quad::common::FL, 2},
-        {7,  bus_c, quad::common::BL, 0}, {8,  bus_c, quad::common::BL, 1}, {9,  bus_a, quad::common::BL, 2},
-        {10, bus_c, quad::common::BR, 0}, {11, bus_c, quad::common::BR, 1}, {12, bus_a, quad::common::BR, 2}
+    //can-id  wire        leg             joint
+        {1,  bus_b, quad::common::FR, HIP_ROLL_IDX}, {2,  bus_b, quad::common::FR, HIP_PITCH_IDX}, {3,  bus_a, quad::common::FR, KNEE_IDX},
+        {4,  bus_b, quad::common::FL, HIP_ROLL_IDX}, {5,  bus_b, quad::common::FL, HIP_PITCH_IDX}, {6,  bus_a, quad::common::FL, KNEE_IDX},
+        {7,  bus_c, quad::common::BL, HIP_ROLL_IDX}, {8,  bus_c, quad::common::BL, HIP_PITCH_IDX}, {9,  bus_a, quad::common::BL, KNEE_IDX},
+        {10, bus_c, quad::common::BR, HIP_ROLL_IDX}, {11, bus_c, quad::common::BR, HIP_PITCH_IDX}, {12, bus_a, quad::common::BR, KNEE_IDX}
     }};
 
     /* START: BRACKET GUARD -- Init Node */
@@ -150,11 +154,14 @@ int main(int argc, char** argv) {
         for (auto& group : bus_groups) {
             // Build frames for just this specific bus
             for (size_t i = 0; i < group.controllers.size(); ++i) {
+                                             // legs and joint_types are indexable by integer
                 double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
                 cmd.position = rad2turns(angle_cmd);
                 cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+                // index vector like array (avoid push_back resizing)
                 group.frames[i] = group.controllers[i]->MakePosition(cmd);
             }
+            // clear all data before writing replies
             group.replies.clear();
             group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
         }
@@ -211,12 +218,12 @@ inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target)
     // retrieve index of leg joint, as well as specific leg
     const auto& leg_data = target.body_joint_angles[leg];
     switch (joint_idx) {
-        case(0): 
-            return leg_data.hip_roll;
-        case(1):
-            return leg_data.hip_pitch;
-        case(2):
+        case(KNEE_IDX): 
             return leg_data.knee_pitch;
+        case(HIP_PITCH_IDX):
+            return leg_data.hip_pitch;
+        case(HIP_ROLL_IDX):
+            return leg_data.hip_roll;
         default:
             return 0.0;
     }

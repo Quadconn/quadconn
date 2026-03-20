@@ -1,13 +1,11 @@
 import evdev
 from evdev import ecodes
 import threading
-import iceoryx2 as iox2
-from gamepad_data import GamepadData
-from system_logic import SystemLogic, to_event_id
+import socket
+import time
 
-
-
-
+# Assuming GamepadData is defined in gamepad_data.py as a ctypes.Structure
+from gamepad_data import GamepadData 
 
 # --- The Controller Logic ---
 class ControllerState:
@@ -105,7 +103,7 @@ class ControllerState:
             dpad_x=int(self.dpad_x),
             dpad_y=int(self.dpad_y),
             
-            # Map Buttons to C Types (uint8)
+            # Map Buttons to C Types (uint8 or int)
             A=btn('A'),
             B=btn('B'),
             X=btn('X'),
@@ -127,68 +125,38 @@ class ControllerState:
             RT=self.r2
         )
 
-# --- Usage Example ---
+# --- Network & Usage Example ---
 if __name__ == "__main__":
+    # --- Network Config ---
+    HOST_PC_IP = "100.81.189.79"  
+    UDP_PORT = 3006
+    CYCLE_TIME_SEC = 0.01         # 10ms cycle time (100 Hz)
+
     controller = ControllerState()
     print("Controller Interface Running...")
-    
-    # iceoryx2 node publishing
-    cycle_time = iox2.Duration.from_millis(10)
-    iox2.set_log_level_from_env_or(iox2.LogLevel.Info)
-    node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-    service = (
-        node.service_builder(iox2.ServiceName.new("GamepadData"))
-        .publish_subscribe(GamepadData)
-        .open_or_create()
-    )
-    publisher = service.publisher_builder().create()
 
-    # create event-based node
-    start_motors = iox2.EventId.new(1)
-    stop_motors = iox2.EventId.new(2)
-
-    event_service = (
-        node
-        .service_builder(iox2.ServiceName.new("SystemLogic"))
-        .event()
-        .open_or_create()
-    )
-
-    notifier = event_service.notifier_builder().create() 
-
-
+    # Create UDP Socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print(f"Streaming data via UDP to {HOST_PC_IP}:{UDP_PORT}")
 
     try:
-
-        prev_data = controller.read()
         while True:
-            node.wait(cycle_time)
-
-            # initialize data to make notifiers
-            sample = publisher.loan_uninit()
+            # 1. Fetch populated ctypes structure from the evdev reader
             data = controller.read()
-            if sample is not None:
-                sample = sample.write_payload(
-                    data 
-                )
-                sample.send()
-                # print(f"\r{data}", end="")
-            else:
-                print("could not loan memory")
-            
-            # notifiers
-            if data.Start:
-                notifier.notify_with_custom_event_id(
-                    to_event_id(SystemLogic.StartMotors))
 
-            if data.Select:
-                notifier.notify_with_custom_event_id(
-                    to_event_id(SystemLogic.KillMotors))
+            # 2. Pack it precisely into C-aligned bytes
+            payload = bytes(data)
 
-            prev_data = data
-            # debug remove later
-            
-            
+            # 3. Send over network
+            sock.sendto(payload, (HOST_PC_IP, UDP_PORT))
+
+            # Optional: Add local logic for system events here if needed, 
+            # e.g., if data.Start: print("Start Pressed!")
+
+            time.sleep(CYCLE_TIME_SEC)
+
     except KeyboardInterrupt:
         print("\nStopping cleanly...")
         controller.running = False
+        controller.thread.join(timeout=1.0)
+        sock.close()

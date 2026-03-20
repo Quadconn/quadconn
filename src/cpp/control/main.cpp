@@ -14,7 +14,7 @@ inline double deadzone(double input_joystick) {
     // hardcoded deadzone of 0.05 to prevent jitter
     return (fabs(input_joystick) < 0.05f ? 
         0.0f : 
-        floor((input_joystick*100+0.5)/100));
+        input_joystick);
 }
 
 

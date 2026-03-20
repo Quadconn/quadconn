@@ -5,132 +5,226 @@
 #include <chrono>
 #include <cmath>
 #include <map>
+#include <filesystem>
+#include <stdexcept>
 
 #include "moteus.h"
 #include "joint_angles.hpp"
+#include "quad_common.hpp"
 #include "motor_diagnostics.hpp"
 #include "quad_ipc.hpp"
 
-
+#include "system_logic.hpp"
 #include "iox2/iceoryx2.hpp"
 
-#define UPDATE_RATE_MS 5
-#define MOTOR_NUM  3
+#define UPDATE_RATE_MS   5
+#define MOTOR_NUM        12
+#define BUS_CTRL_NUM     4
+
+#define KNEE_IDX             0
+#define HIP_PITCH_IDX        1
+#define HIP_ROLL_IDX         2
+
+std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port);
+inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target);
+
+// used to define mapping
+struct MotorDef {
+    int can_id;
+    std::shared_ptr<mjbots::moteus::Fdcanusb> bus;
+    int leg;
+    int joint_idx;
+};
+
+// used to construct sending/receiving messages
+// each bus will contain a vector of its own controllers, legs, joint types, and frames
+struct BusGroup {
+    std::shared_ptr<mjbots::moteus::Fdcanusb> bus;
+    std::vector<std::shared_ptr<mjbots::moteus::Controller>> controllers;   // vectors
+    std::vector<int> legs;                                                  // defined
+    std::vector<int> joint_types;                                           // here
+    std::vector<mjbots::moteus::CanFdFrame> frames;                         // not resized
+    std::vector<mjbots::moteus::CanFdFrame> replies;                        // during loop
+};
+
 
 int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
 
     
-    
     // change usb-id depending on motor id used, map motor controller node ids to bus
-    const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    //const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
-    std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
-        // {4, bus_b},
-        // {5, bus_b},
-        // {6, bus_b}
-    };
+    // remember to update bus_c to be an actual usb
+    const auto bus_a = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");    
+    const auto bus_b = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
+    const auto bus_c = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_6A9ABCBD-if00");
+
+    
+    std::array<MotorDef, MOTOR_NUM> robot_config = {{
+    //can-id  wire        leg             joint
+        {1,  bus_b, quad::common::FR, HIP_ROLL_IDX}, {2,  bus_b, quad::common::FR, HIP_PITCH_IDX}, {3,  bus_a, quad::common::FR, KNEE_IDX},
+        {4,  bus_b, quad::common::FL, HIP_ROLL_IDX}, {5,  bus_b, quad::common::FL, HIP_PITCH_IDX}, {6,  bus_a, quad::common::FL, KNEE_IDX},
+        {7,  bus_c, quad::common::BL, HIP_ROLL_IDX}, {8,  bus_c, quad::common::BL, HIP_PITCH_IDX}, {9,  bus_a, quad::common::BL, KNEE_IDX},
+        {10, bus_c, quad::common::BR, HIP_ROLL_IDX}, {11, bus_c, quad::common::BR, HIP_PITCH_IDX}, {12, bus_a, quad::common::BR, KNEE_IDX}
+    }};
 
     /* START: BRACKET GUARD -- Init Node */
     auto motor_node = make_node("motor_node");
 
     auto diagnostic_publisher = make_publisher<MotorDiagnosticsArray>
         (make_service<MotorDiagnosticsArray>("MotorDiagnosticsArray", motor_node));
-    auto angle_subscriber = make_subscriber<JointAngles>
-        (make_service<JointAngles>("JointAngles", motor_node));
+    auto angle_subscriber = make_subscriber<BodyJointAngles>
+        (make_service<BodyJointAngles>("BodyJointAngles", motor_node));
+    auto system_listener = make_listener
+        (make_event("SystemLogic", motor_node));
 
-    const bb::Duration node_duration = bb::Duration::from_millis(UPDATE_RATE_MS);
     /* END: BRACKET GUARD -- Init Node */
 
-    // Initialize Controllers
-    std::array<std::shared_ptr<moteus::Controller>, MOTOR_NUM> controllers;
-    {
-        int i = 0; 
-        for (auto const& [id, bus] : id_to_bus) {
-            moteus::Controller::Options options{};
-            options.id = id;
-            options.transport = bus; 
-            controllers[i] = std::make_shared<moteus::Controller>(options);
-            i++;
-        }
-    }
-    // Stop everything to clear faults first
-    for (auto& c : controllers) { c->SetStop(); }
 
+    std::map<std::shared_ptr<moteus::Fdcanusb>, BusGroup> bus_groups_map;
+
+    for (const auto& def : robot_config) {
+        moteus::Controller::Options opts{};
+        opts.id = def.can_id;
+        opts.transport = def.bus;
+
+        // populate BusGroup directly using key-value pairs
+        // if already exists, then retrieve reference. Otherwise, create
+        // another key-value pair
+        auto& group = bus_groups_map[def.bus];
+
+        group.bus = def.bus;
+        // populate vectors once
+        group.controllers.push_back(std::make_shared<moteus::Controller>(opts));
+        group.legs.push_back(def.leg);
+        group.joint_types.push_back(def.joint_idx);
+        
+        // Pre-allocate empty frame to avoid resizing in the hot loop
+        group.frames.push_back(moteus::CanFdFrame()); 
+    }
+
+    // index bus_groups to iterate through controllers/commands.
+    // will now use bus_groups for all communication (no more map)
+    std::vector<BusGroup> bus_groups;
+    for (auto& [bus, group] : bus_groups_map) {
+        if (bus == nullptr) {
+            std::cout << "bus in warning not connnected, program exiting early\n";
+            return 1;
+        }
+        bus_groups.push_back(std::move(group));
+    }
+
+
+    // Clear faults
+    for (auto& group : bus_groups) {
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+    }
 
     // Prepare batch of commands
-    JointAngles target_val = {.hip_roll=0.0, .hip_pitch=0.0, .knee_pitch=0.0};
-
+    BodyJointAngles target_val{};
     // handles moteus sending, query, and receiving data structures
     moteus::PositionMode::Command cmd;
-    // TODO: change maps and vectors to static arrays 
-    std::vector<moteus::CanFdFrame> replies;
-    std::map<int, moteus::Query::Result> servo_data;
-    // moteus transport information
-    std::map<std::shared_ptr<moteus::Fdcanusb>, std::vector<moteus::CanFdFrame>> bus_cmd;
 
     // Execution loop
     std::cout << "starting motor loop\n";
-    
     // attempt to receive value on loop duration
+
     while (loop_waitms(UPDATE_RATE_MS, motor_node)) { 
         
-        // clear on new loop
-        servo_data.clear();
-        bus_cmd.clear();
-        replies.clear();
+        auto event = system_listener.try_wait_one();
+        // catch stop signal
+        if (event.has_value() && event.value().has_value()) {
+            if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
+                    std::cout << "stopping motor_controller process";
+                    break;
+            }
+        }
+
+        
 
         // receiving values from JointAngles struct
-        auto sample_r = angle_subscriber.receive().value();
-        if (sample_r.has_value()) {
-            target_val.hip_roll =   sample_r.value().payload().hip_roll;
-            target_val.hip_pitch =  sample_r.value().payload().hip_pitch;
-            target_val.knee_pitch = sample_r.value().payload().knee_pitch;
-        }
+        target_val = ipc_receive(angle_subscriber).value_or(target_val);
 
-        //  build the CAN frames using the latest targets
-        for (size_t i = 0; i < controllers.size(); ++i) {
-            double angle_cmd = (i == 0) ? target_val.hip_roll :
-                               (i == 1) ? target_val.hip_pitch :
-                                          target_val.knee_pitch;
-
-            cmd.position = rad2turns(angle_cmd);
-            cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
-            auto frame = controllers[i]->MakePosition(cmd);
-            bus_cmd[id_to_bus[controllers[i]->options().id]].push_back(frame);
-        }
-
-        
-        //  Execute a cycle for EACH transport
-        for (auto& [bus, frames] : bus_cmd) {
-            bus->BlockingCycle(&frames[0], frames.size(), &replies);
-            
-            for (const auto& frame : replies) {
-                servo_data[frame.source] = moteus::Query::Parse(frame.data, frame.size);
+        //  build the CAN frames using the latest targets 
+        //  grouped by buses
+        for (auto& group : bus_groups) {
+            // Build frames for just this specific bus
+            for (size_t i = 0; i < group.controllers.size(); ++i) {
+                                             // legs and joint_types are indexable by integer
+                double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
+                cmd.position = rad2turns(angle_cmd);
+                cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+                // index vector like array (avoid push_back resizing)
+                group.frames[i] = group.controllers[i]->MakePosition(cmd);
             }
-        }   
-
-
+            // clear all data before writing replies
+            group.replies.clear();
+            group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+        }
+        
         // Loan default-constructed memory directly from the shared pool
-        auto sample_s = diagnostic_publisher.loan().value();
-        // Loop through the Moteus servo data
-        for (auto const& [id, result] : servo_data) {
-            int target_idx = id - 1;
-            if (target_idx >= 0 && target_idx < MOTOR_NUM) {
-                // Access the array directly inside the shared memory segment using ->
-                sample_s.payload_mut().motor_instance[target_idx] = motor_info::make_diag(result);
-            }
-        }
-        // Send the sample off to any subscribers
-        iox2::send(std::move(sample_s)).value();
+        auto sample_s_opt = diagnostic_publisher.loan();
+        if (sample_s_opt.has_value()) {
+            auto sample_s = std::move(sample_s_opt.value());
 
+            for (const auto& group : bus_groups) {
+                for (const auto& frame: group.replies) {
+                    auto result = moteus::Query::Parse(frame.data, frame.size);
+                    int target_idx = frame.source - 1; 
+                    
+                    if (target_idx >= 0 && target_idx < MOTOR_NUM) {
+                        sample_s.payload_mut().motor_instance[target_idx] = motor_info::make_diag(result);
+                    }
+                }
+            }
+            // Send the sample off to any subscribers
+            iox2::send(std::move(sample_s)).value();
         }
-        
-    // End safely
-    for (auto& c : controllers) { c->SetStop(); }
+    }
+    // End safely,
+    // Clear faults
+    for (auto& group : bus_groups) {
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+    }
     return 0;
+}
+
+
+
+// Attempts to open the CAN bus. Returns nullptr if it fails or is missing.
+std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& port) {
+    if (!std::filesystem::exists(port)) {
+        std::cout << "[WARN] Hardware missing at " << port << ". Program will not run.\n";
+        return nullptr;
+    }
+    
+    try {
+        return std::make_shared<mjbots::moteus::Fdcanusb>(port);
+    } catch (const std::exception& e) {
+        std::cout << "[ERROR] Failed to init " << port << ": " << e.what() << "\n";
+        return nullptr; // Fallback to simulation
+    }
+}
+
+inline double parse_angle(int leg, int joint_idx, const BodyJointAngles& target) {
+    // retrieve index of leg joint, as well as specific leg
+    const auto& leg_data = target.body_joint_angles[leg];
+    switch (joint_idx) {
+        case(KNEE_IDX): 
+            return leg_data.knee_pitch;
+        case(HIP_PITCH_IDX):
+            return leg_data.hip_pitch;
+        case(HIP_ROLL_IDX):
+            return leg_data.hip_roll;
+        default:
+            return 0.0;
+    }
 }

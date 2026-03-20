@@ -1,47 +1,139 @@
+import os
 import sys
+
+# This block ensures the Torch engine loads its memory space and DLLs before GStreamer or PyQT6 to prevent initialization routine failure error (WinError 1114)
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OMP_NUM_THREADS"] = "1"
+
+try:
+    # Manually pointing Windows to torch lib folder before app starts
+    venv_base = os.path.dirname(sys.executable)
+    torch_lib = os.path.join(venv_base, "Lib", "site-packages", "torch", "lib")
+    
+    # Directly load the venv's DLL directory into the OS search path
+    if os.path.exists(torch_lib):
+        os.add_dll_directory(torch_lib)
+   
+    # Pre-loading Torch at global level locks the libraries into memory
+    import torch
+    torch.set_num_threads(1)
+    print("Global Torch Engine Initialized Successfully")
+except Exception as e:
+    # Safe to ignore on macOS or environments without Torch installed
+    print(f"Global Setup Note: {e}")
+
+# Configuration Constants
+TELEMETRY_PORT = 808
+VIDEO_PORT = 5000
+MIC_TO_SPEAKER_PORT = 3004
+SPEAKER_TO_MIC_PORT = 3005
+YOLO_WEIGHTS = 'yolov8n.pt'
+
+## Standard Imports ##
 import socket
 import subprocess
 import numpy as np
 import cv2
+import traceback
 from ctypes import sizeof, memmove, addressof
 
-# GStreamer Integration
+# GStreamer Integration: Handles raw H.264 stream decoding
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
+# PyQt6 UI Components
 from PyQt6.QtCore import QThread, pyqtSignal, Qt, QMutex
-from PyQt6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QHBoxLayout, 
-                             QWidget, QGridLayout, QPushButton, QLineEdit)
+from PyQt6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QHBoxLayout,
+                             QWidget, QGridLayout, QPushButton, QLineEdit, QSlider)
 from PyQt6.QtGui import QImage, QPixmap
 
-# Importing the 1152-byte C-compatible structure for motor diagnostics
+# C-compatible structure for 1,152-byte motor packets
 from motor_diagnostics import MotorDiagnosticsArray, MotorInfo, MOTOR_COUNT
 
 # Initialize GStreamer core
 Gst.init(None)
 
+## TWO-WAY AUDIO INTEGRATION ##
+
+class AudioReceiveThread(QThread):
+    # Handles background reception of robot mic audio on Port 3004 and plays it locally on the Mac
+    def __init__(self):
+        super().__init__()
+        self.pipeline = None
+        self.volume_element = None
+        self.daemon = True
+
+    def run(self):
+        # GStreamer Launch String -> receives OPUS audio via UDP on Port 3004 with a 100ms jitter buffer for stability
+        gst_str = (
+            f"udpsrc port={MIC_TO_SPEAKER_PORT} ! "
+            "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96 ! "
+            "rtpjitterbuffer latency=100 ! rtpopusdepay ! opusdec ! audioconvert ! audioresample ! "
+            "volume name=vol_control volume=1.0 ! autoaudiosink sync=false"
+        )
+        self.pipeline = Gst.parse_launch(gst_str)
+        self.volume_element = self.pipeline.get_by_name("vol_control")
+        self.pipeline.set_state(Gst.State.PLAYING)
+        
+        loop = GLib.MainLoop()
+        loop.run()
+
+    def set_volume(self, value):
+        # Maps slider value to GStreamer volume property (0.0 to 1.0)
+        if self.volume_element:
+            self.volume_element.set_property("volume", value / 100.0)
+
+class AudioSendThread(QThread):
+    # Captures local Mac microphone audio and sends it to the robot's speakers on Port 3005
+    def __init__(self, robot_ip):
+        super().__init__()
+        self.robot_ip = robot_ip
+        self.pipeline = None
+        self.daemon = True
+
+    def run(self):
+        # GStreamer Launch String -> captures local mic using osxaudiosrc and streams to robot's IP
+        gst_str = (
+            "osxaudiosrc ! audioconvert ! audioresample ! "
+            "opusenc bitrate=64000 ! rtpopuspay ! "
+            f"udpsink host={self.robot_ip} port={SPEAKER_TO_MIC_PORT}"
+        )
+        self.pipeline = Gst.parse_launch(gst_str)
+        self.pipeline.set_state(Gst.State.PLAYING)
+        
+        loop = GLib.MainLoop()
+        loop.run()
+
+    def set_mute(self, is_muted):
+        # Toggles the pipeline state between NULL and PLAYING to mute the microphone
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.NULL if is_muted else Gst.State.PLAYING)
+
+## WORKER THREADS (AI & TELEMETRY) ##
+
 class TelemetryReceiver(QThread):
-    # Handles background UDP reception of motor diagnostic data on Port 808
+
+    # Handles background UDP reception of motor diagnostic data on Port 808 by directly mapping raw network bytes into C-style memory structures
     data_received = pyqtSignal(object)
     connection_status = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__()
         self.running = True
-        self.daemon = True # Ensures the thread dies if the main application crashes
+        self.daemon = True # Ensures thread dies if main application closes
 
     def run(self):
         # Setup UDP socket with a 1-second timeout for 'Offline' detection
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(1.0)
         try:
-            sock.bind(("0.0.0.0", 808))
+            sock.bind(("0.0.0.0", TELEMETRY_PORT))
         except Exception as e:
             print(f"Socket Bind Error: {e}")
-        
+       
         expected_size = sizeof(MotorDiagnosticsArray)
-        print("Telemetry Receiver Active (Port 808)")
+        print(f"Telemetry Receiver Active {TELEMETRY_PORT}")
 
         while self.running:
             try:
@@ -59,12 +151,13 @@ class TelemetryReceiver(QThread):
         sock.close()
 
     def stop(self):
-        # Terminates the socket loop safely
+        # Terminates socket loop safely
         self.running = False
         self.quit()
 
 class InferenceWorker(QThread):
-    # Executes YOLOv8 inference in a parallel thread (ensures that AI processing never slows down the 30 FPS video feed)
+
+    # Ensures YOLOv8 inference in a parallel thread while ensuring that AI processing does not slow down the 30 FPS GStreamer video feed
     results_ready = pyqtSignal(object)
     model_loaded = pyqtSignal()
 
@@ -73,15 +166,27 @@ class InferenceWorker(QThread):
         self.model = None
         self.frame_to_process = None
         self.running = True
-        self.mutex = QMutex() # Prevents race conditions when updating frames
+        self.mutex = QMutex() # Prevents race conditions during frame handovers
         self.daemon = True
 
     def run(self):
-        # Load YOLO model asynchronously to keep GUI responsive during boot
-        from ultralytics import YOLO 
-        self.model = YOLO('yolov8n.pt')
-        self.model_loaded.emit()
-        
+        # Since torch is already loaded globally, we just load the YOLO weights
+        try:
+            from ultralytics import YOLO
+            print("Loading YOLOv8 weights...")
+            self.model = YOLO(YOLO_WEIGHTS)
+           
+            # Final run to ensure the thread has access to the global engine
+            dummy_frame = np.zeros((160, 160, 3), dtype=np.uint8)
+            self.model.predict(dummy_frame, device='cpu', verbose=False)
+           
+            print("Person Detection Ready!")
+            self.model_loaded.emit()
+        except Exception as e:
+            print(f"InferenceWorker Initialization Error: {e}")
+            traceback.print_exc()
+            return
+       
         while self.running:
             frame = None
             self.mutex.lock()
@@ -90,12 +195,13 @@ class InferenceWorker(QThread):
                 self.frame_to_process = None
             self.mutex.unlock()
 
-            if frame is not None:
+            if frame is not None and self.model:
                 # Detect people only (class 0) with a 50% confidence threshold
-                results = self.model.predict(frame, classes=[0], conf=0.5, verbose=False)
-                self.results_ready.emit(results[0].plot()) 
+                results = self.model.predict(frame, classes=[0], conf=0.5, device='cpu', verbose=False)
+                if len(results) > 0:
+                    self.results_ready.emit(results[0].plot())
             else:
-                self.msleep(10) # Avoid CPU 100% usage when idle
+                self.msleep(30) # Optimized polling rate for CPU stability
 
     def update_frame(self, frame):
         # Submits a new frame for processing if the worker is ready
@@ -104,27 +210,27 @@ class InferenceWorker(QThread):
             self.mutex.unlock()
 
 class VideoThread(QThread):
-    # Manages the GStreamer pipeline and handles remote SSH triggers for the robot hardware.
+    # Manages GStreamer pipeline and handles remote SSH triggers for robot hardware
     change_pixmap_signal = pyqtSignal(QPixmap)
-    ai_status_signal = pyqtSignal(str) 
+    ai_status_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        # Robot Config: Standard across the team
-        self.robot_ip = "100.81.189.79" 
-        self.host_ip = "" # Provided via GUI entry (Your Tailscale IP)
+        # Robot Configuration
+        self.robot_ip = "100.81.189.79"
+        self.host_ip = "" # Your Tailscale IP
         self.robot_exec = "/home/quadconn/gui_branch/quadconn/build/camera_stream"
 
         self.ai_enabled = True
         self.pipeline = None
         self.loop = None
         self.daemon = True
-        
+       
         # Initialize parallel AI worker
         self.ai_worker = InferenceWorker()
         self.ai_worker.results_ready.connect(self.on_ai_results)
         self.ai_worker.model_loaded.connect(lambda: self.ai_status_signal.emit("READY"))
-        self.latest_ai_plot = None 
+        self.latest_ai_plot = None
 
     def run(self):
         # Start AI worker and GStreamer pipeline
@@ -133,7 +239,7 @@ class VideoThread(QThread):
 
         # GStreamer Launch String: Receives H.264 via UDP on Port 5000
         gst_str = (
-            "udpsrc port=5000 ! "
+            f"udpsrc port={VIDEO_PORT} ! "
             "application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264,payload=(int)96 ! "
             "rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
             "video/x-raw,format=BGR ! appsink name=sink emit-signals=True sync=false"
@@ -148,20 +254,37 @@ class VideoThread(QThread):
         self.loop.run()
 
     def start_remote_hardware(self):
-        # Triggers the robot's camera binary via SSH
-        if not self.host_ip:
-            print("Error: No Host IP set. Camera cannot start.")
-            return
-
-        print(f"Connecting to robot at {self.robot_ip} (Targeting Host: {self.host_ip})...")
+        # Triggers the robot's camera binary and two-way audio streams via SSH
+        if not self.host_ip: return
+        print(f"Connecting to robot at {self.robot_ip}...")
         
-        # Kill old instances on the robot to prevent 'Port Busy' errors
-        cleanup = f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} 'sudo pkill -9 camera_stream; sudo fuser -k /dev/video0'"
+        # Force kill video and old GStreamer audio pipes
+        cleanup = (
+            f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} "
+            f"\"sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0; sudo fuser -k /dev/video0\""
+        )
         subprocess.run(cleanup, shell=True)
         
-        # Launch robot-side binary pointing back to your computer's IP
-        launch = f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} '{self.robot_exec} {self.host_ip}'"
-        subprocess.Popen(launch, shell=True)
+        # Launch binary pointing back to this computer
+        launch_video = f"{self.robot_exec} {self.host_ip}"
+        
+        # Robot Mic -> Host (Port 3004)
+        launch_audio_send = (
+            f"gst-launch-1.0 alsasrc device=hw:WEBCAM ! audioconvert ! audioresample ! "
+            f"\\\"audio/x-raw,rate=48000,channels=1\\\" ! opusenc bitrate=64000 ! rtpopuspay ! "
+            f"udpsink host={self.host_ip} port={MIC_TO_SPEAKER_PORT}"
+        )
+        
+        # Host -> Robot Speakers (Port 3005)
+        launch_audio_recv = (
+            f"gst-launch-1.0 udpsrc port={SPEAKER_TO_MIC_PORT} ! "
+            f"\\\"application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96\\\" ! "
+            f"rtpopusdepay ! opusdec ! audioconvert ! audioresample ! alsasink device=hw:UACDemoV10"
+        )
+
+        # Execute all 3 remote processes in parallel
+        full_launch = f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} \"({launch_video} & {launch_audio_send} & {launch_audio_recv})\""
+        subprocess.Popen(full_launch, shell=True)
 
     def on_ai_results(self, plotted_frame):
         # Stores the latest detection overlay for persistent rendering
@@ -171,7 +294,6 @@ class VideoThread(QThread):
         # Processes raw GStreamer buffers into PyQt6-compatible images
         sample = sink.emit("pull-sample")
         if not sample: return Gst.FlowReturn.ERROR
-        
         buf = sample.get_buffer()
         caps = sample.get_caps()
         res, map_info = buf.map(Gst.MapFlags.READ)
@@ -182,78 +304,94 @@ class VideoThread(QThread):
             frame = np.frombuffer(map_info.data, dtype=np.uint8).reshape((height, width, 3))
             
             # Submit frame to parallel AI thread
-            if self.ai_enabled:
+            if self.ai_enabled: 
                 self.ai_worker.update_frame(frame)
-
-            # Determine whether to show raw video or AI annotated frame
+            
+            # Decide whether to show raw video or AI annotated frame
             if self.ai_enabled and self.latest_ai_plot is not None:
                 display_frame = cv2.resize(self.latest_ai_plot, (width, height))
             else:
                 display_frame = frame
-
+            
             # Color conversion (BGR to RGB) and signal emission to the main GUI thread
             rgb_image = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             qimg = QImage(rgb_image.data, w, h, ch * w, QImage.Format.Format_RGB888)
             self.change_pixmap_signal.emit(QPixmap.fromImage(qimg))
-            
             buf.unmap(map_info)
         return Gst.FlowReturn.OK
 
     def stop(self):
-        # Graceful shutdown of local threads and remote robot binaries
+        # Safe shutdown of local threads and remote robot binaries
         if self.loop: self.loop.quit()
         if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
         self.ai_worker.running = False
-        subprocess.run(f"ssh -o ConnectTimeout=2 quadconn@{self.robot_ip} 'sudo pkill -9 camera_stream'", shell=True)
+        subprocess.run(f"ssh -o ConnectTimeout=2 quadconn@{self.robot_ip} \"sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0\"", shell=True)
         self.quit()
 
+## Main User Interface ##
 class QuadconnDashboard(QWidget):
-    # Main User Interface (integrates the video feed, manual IP configuration, and the 12-motor telemetry grid
+    # Integrates video stream, manual network configuration, 12-motor telemetry grid, and two-way audio
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Quadconn Senior Design Dashboard")
         self.setFixedSize(1200, 750)
         self.setStyleSheet("background-color: #0A0A0A; color: #FFFFFF;")
-
+        
+        # Main Layout
         main_layout = QHBoxLayout()
+        
         # Live Video Display Label
-        self.video_label = QLabel("PASTE YOUR TAILSCALE IP & START CAMERA")
+        self.video_label = QLabel("PASTE YOUR TAILSCALE IP & START SYSTEM")
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setFixedSize(780, 580)
         self.video_label.setStyleSheet("border: 2px solid #333; background-color: black;")
         main_layout.addWidget(self.video_label)
-
+        
+        # Sidebar Container
         self.sidebar = QVBoxLayout()
         
-        # Configuration Sidebar Section
+        # Configuration Section
         self.sidebar.addWidget(QLabel("YOUR TAILSCALE IP:"))
         self.ip_input = QLineEdit()
         self.ip_input.setPlaceholderText("Paste 100.x.x.x address here")
         self.ip_input.setStyleSheet("background-color: #222; border: 1px solid #555; padding: 5px; color: #00FF00;")
         self.sidebar.addWidget(self.ip_input)
-
-        self.btn_start = QPushButton("SET IP & START CAMERA")
+        
+        self.btn_start = QPushButton("START ROBOT COMMS")
         self.btn_start.setStyleSheet("background-color: #004400; color: white; padding: 10px; font-weight: bold;")
-        self.btn_start.clicked.connect(self.restart_camera_action)
+        self.btn_start.clicked.connect(self.restart_hardware_action)
         self.sidebar.addWidget(self.btn_start)
 
-        # Battery and Online/Offline Header
+        # Audio Control Section
+        self.sidebar.addWidget(QLabel("AUDIO CONTROLS:"))
+        self.btn_mic = QPushButton("MIC: UNMUTED")
+        self.btn_mic.setStyleSheet("background-color: #222; border: 1px solid #00FF00; color: #00FF00; padding: 8px;")
+        self.btn_mic.clicked.connect(self.toggle_mic)
+        self.sidebar.addWidget(self.btn_mic)
+
+        self.sidebar.addWidget(QLabel("SPEAKER VOLUME:"))
+        self.slider_vol = QSlider(Qt.Orientation.Horizontal)
+        self.slider_vol.setRange(0, 100); self.slider_vol.setValue(80)
+        self.slider_vol.valueChanged.connect(self.update_speaker_volume)
+        self.sidebar.addWidget(self.slider_vol)
+        
+        # Status Header
         self.status_header = QHBoxLayout()
         self.lbl_volt = QLabel("BATTERY: -- V")
-        self.lbl_volt.setStyleSheet("font-size: 20px; color: #00FF00; font-weight: bold;")
         self.lbl_status = QLabel("OFFLINE")
         self.lbl_status.setStyleSheet("font-size: 14px; color: #FF0000; font-weight: bold; border: 1px solid #FF0000; padding: 4px;")
         self.status_header.addWidget(self.lbl_volt)
         self.status_header.addWidget(self.lbl_status)
         self.sidebar.addLayout(self.status_header)
 
+        # AI Control Button
         self.btn_ai = QPushButton("PERSON DETECTION: READY")
         self.btn_ai.setStyleSheet("border: 1px solid #00FF00; color: #00FF00; padding: 10px;")
         self.btn_ai.clicked.connect(self.toggle_ai)
         self.sidebar.addWidget(self.btn_ai)
-
-        # 12-motor grid layout for positions and individual voltages
+        
+        # 12-Motor Grid
         self.grid = QGridLayout()
         self.motor_labels = []
         for i in range(MOTOR_COUNT):
@@ -262,9 +400,9 @@ class QuadconnDashboard(QWidget):
             lbl.setStyleSheet("border: 1px solid #444; font-size: 10px; background-color: #111;")
             self.grid.addWidget(lbl, i // 3, i % 3)
             self.motor_labels.append(lbl)
-        
         self.sidebar.addLayout(self.grid)
         self.sidebar.addStretch()
+        
         main_layout.addLayout(self.sidebar)
         self.setLayout(main_layout)
 
@@ -279,13 +417,28 @@ class QuadconnDashboard(QWidget):
         self.video_thread.ai_status_signal.connect(self.update_ai_button_status)
         self.video_thread.start()
 
-    def restart_camera_action(self):
-        # Passes the manual host IP to the video thread and triggers the robot
+        # Local audio threads initialization
+        self.audio_recv_thread = AudioReceiveThread(); self.audio_recv_thread.start()
+        self.audio_send_thread = AudioSendThread(self.video_thread.robot_ip); self.audio_send_thread.start()
+
+    def restart_hardware_action(self):
+        # Passes manual host IP to video thread and triggers robot
         self.video_thread.host_ip = self.ip_input.text()
         self.video_thread.start_remote_hardware()
 
+    def toggle_mic(self):
+        # Toggles microphone state and updates UI colors
+        is_muted = "UNMUTED" in self.btn_mic.text()
+        self.audio_send_thread.set_mute(is_muted)
+        self.btn_mic.setText(f"MIC: {'MUTED' if is_muted else 'UNMUTED'}")
+        self.btn_mic.setStyleSheet(f"background-color: #222; border: 1px solid {'#FF0000' if is_muted else '#00FF00'}; color: {'#FF0000' if is_muted else '#00FF00'}; padding: 8px;")
+
+    def update_speaker_volume(self, value):
+        # Passes slider value to the local audio receiver
+        self.audio_recv_thread.set_volume(value)
+
     def update_ai_button_status(self, status):
-        # Updates UI styling based on whether the AI model is loading or ready
+        # Updates UI styling based on AI model state
         if status == "LOADING":
             self.btn_ai.setText("PERSON DETECTION: INITIALIZING...")
             self.btn_ai.setStyleSheet("border: 1px solid #FFA500; color: #FFA500;")
@@ -294,47 +447,34 @@ class QuadconnDashboard(QWidget):
             self.btn_ai.setStyleSheet("border: 1px solid #00FF00; color: #00FF00;")
 
     def toggle_ai(self):
-        # Enables/Disables the YOLO overlay in real-time
+        # Enables/Disables YOLO overlay in real-time
         if "INITIALIZING" in self.btn_ai.text(): return
         self.video_thread.ai_enabled = not self.video_thread.ai_enabled
-        if self.video_thread.ai_enabled:
-            self.btn_ai.setText("PERSON DETECTION: ON")
-            self.btn_ai.setStyleSheet("border: 1px solid #00FF00; color: #00FF00;")
-        else:
-            self.btn_ai.setText("PERSON DETECTION: OFF")
-            self.btn_ai.setStyleSheet("border: 1px solid #FF0000; color: #FF0000;")
-            self.video_thread.latest_ai_plot = None 
+        self.btn_ai.setText(f"PERSON DETECTION: {'ON' if self.video_thread.ai_enabled else 'OFF'}")
+        self.btn_ai.setStyleSheet(f"border: 1px solid {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'}; color: {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'};")
 
     def update_video(self, pixmap):
-        # Renders the latest processed frame to the UI
+        # Renders latest processed frame to UI
         self.video_label.setPixmap(pixmap.scaled(self.video_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
 
     def update_connection_ui(self, is_online):
-        # Updates the status indicator based on telemetry reception
-        if is_online:
-            self.lbl_status.setText("ONLINE")
-            self.lbl_status.setStyleSheet("color: #00FF00; border: 1px solid #00FF00; padding: 4px;")
-        else:
-            self.lbl_status.setText("OFFLINE")
-            self.lbl_status.setStyleSheet("color: #FF0000; border: 1px solid #FF0000; padding: 4px;")
+        # Updates status indicator based on telemetry reception
+        self.lbl_status.setText("ONLINE" if is_online else "OFFLINE")
+        self.lbl_status.setStyleSheet(f"color: {'#00FF00' if is_online else '#FF0000'}; border: 1px solid {'#00FF00' if is_online else '#FF0000'}; padding: 4px;")
 
     def update_telemetry(self, data):
-        # Calculates total battery and updates the 12-motor grid nodes
+        # Calculates battery health and updates motor grid with fault highlights
         total_v = 0
         for i in range(MOTOR_COUNT):
             m = data.motor_instance[i]
             total_v += m.voltage
             self.motor_labels[i].setText(f"M{i+1} | {m.position:.2f}\n{m.voltage:.1f}V")
-            
-            # Highlight faults in Red, active motors in Green
             color = "#00FF00" if m.fault == 0 else "#FF0000"
             self.motor_labels[i].setStyleSheet(f"border: 2px solid {color}; color: {color}; font-size: 10px; font-weight: bold;")
-        
-        # Display average battery health in the header
         self.lbl_volt.setText(f"BATTERY: {total_v/MOTOR_COUNT:.1f} V")
 
     def closeEvent(self, event):
-        # Ensures robot processes are killed when you close the dashboard window
+        # Ensures local and remote processes are killed when closing the window
         self.telem_thread.stop()
         self.video_thread.stop()
         event.accept()

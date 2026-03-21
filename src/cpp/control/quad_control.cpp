@@ -182,11 +182,11 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
                                (_command.height - foot_location.z()) / config::z_time_constant);
 
     // Get inverse position delta for this time step
-    Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * config::dt;
+    Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * common::DT;
 
 
     // Calculate inverse body rotation delta for this time step to achieve commanded yaw rate
-    Eigen::Matrix3d inv_rot_delta_z = Eigen::AngleAxisd(-_command.yaw_rate * config::dt, 
+    Eigen::Matrix3d inv_rot_delta_z = Eigen::AngleAxisd(-_command.yaw_rate * common::DT, 
                                                   Eigen::Vector3d::UnitZ()).toRotationMatrix();
 
 
@@ -202,11 +202,11 @@ Eigen::Vector3d QuadControl::swing_raibert_touchdown_location(std::size_t leg_in
 
     Eigen::Vector3d pos_delta_xy = vel_xy * 
                                    config::alpha * 
-                                   config::stance_ticks * config::dt;
+                                   config::stance_ticks * common::DT;
     // Rotational delta in z for current time step to achieve desired body yaw from commanded yaw rate
     Eigen::Matrix3d rot_delta_z = Eigen::AngleAxisd(_command.yaw_rate * 
                                                     config::beta *
-                                                    config::stance_ticks * config::dt, 
+                                                    config::stance_ticks * common::DT, 
                                                     Eigen::Vector3d::UnitZ()).toRotationMatrix();
     // Apply rotational and positional deltas to default stance
     return rot_delta_z * config::DEFAULT_STANCE[leg_index] + pos_delta_xy;
@@ -229,12 +229,12 @@ void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, doubl
     Eigen::Vector3d touchdown_location = swing_raibert_touchdown_location(leg_index);
 
     // Velocity needed to get to touchdown location within the time left in the swing
-    double time_left = config::dt * (config::swing_ticks * (1.0 - swing_proportion));
+    double time_left = common::DT * (config::swing_ticks * (1.0 - swing_proportion));
     Eigen::Vector3d vel = (touchdown_location - foot_location) / time_left;
     vel.z() = 0.0;
 
     // Position delta for this time step
-    Eigen::Vector3d pos_delta_xy = vel * config::dt;
+    Eigen::Vector3d pos_delta_xy = vel * common::DT;
 
     // Take z position as space between robots height and the calculated swing height
     foot_location.z() = swing_height + _command.height;

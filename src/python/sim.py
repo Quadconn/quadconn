@@ -16,12 +16,11 @@ if __name__ == "__main__":
         isVisualizeOnly = True
 
     iox2.set_log_level_from_env_or(iox2.LogLevel.Info)
+    cycle_time = iox2.Duration.from_millis(quad_common.DT_MILLI)
     sim_node = quad_ipc.make_node("sim_node")
     joint_subscriber = (
         quad_ipc.make_subscriber(quad_ipc.make_service("BodyJointAngles", joint_angles.BodyJointAngles, sim_node))
     )
-
-    
 
     # Load model
     physicsClient = p.connect(p.GUI)
@@ -39,6 +38,7 @@ if __name__ == "__main__":
     p.setRealTimeSimulation(True)
 
     while True:
+        sim_node.wait(cycle_time)
 
         data = quad_ipc.ipc_receive(joint_subscriber) 
 

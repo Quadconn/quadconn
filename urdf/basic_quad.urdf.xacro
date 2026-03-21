@@ -3,6 +3,7 @@
 
 
 <!-- Variable Definitions -->
+<!-- TODO DR: Fix for new lengths! -->
 <xacro:property name="thigh_length" value="0.22550"/>
 <xacro:property name="thigh_offset" value="0.02300"/>
 

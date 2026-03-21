@@ -11,9 +11,6 @@
 //  - time -> seconds
 
 namespace quad::config {
-    // Program Tick length
-    inline constexpr double dt              = 0.01;
-    inline constexpr int    dt_milli        = dt * 1E3;
     // Time step to clamp height correction speed
     inline constexpr double z_time_constant = 0.02;
 
@@ -27,8 +24,8 @@ namespace quad::config {
     // Gait timings
     inline constexpr double overlap_time    = 0.10; // Duration where all feet on ground
     inline constexpr double swing_time      = 0.15; // Duration when only two diagonal feet on ground
-    inline constexpr int overlap_ticks      = overlap_time / dt;
-    inline constexpr int swing_ticks        = swing_time / dt;
+    inline constexpr int overlap_ticks      = overlap_time / quad::common::DT;
+    inline constexpr int swing_ticks        = swing_time / quad::common::DT;
     inline constexpr int stance_ticks       = (2 * overlap_ticks) + swing_ticks;
 
     // Total tick duration of a full gait (swings and overlaps)
@@ -63,6 +60,7 @@ namespace quad::config {
     }};
 
     // Kinematic Lengths
+    // TODO DR: Adjust for new lengths!
     inline constexpr double ABDUCTION_OFFSET = 0.102;
     inline constexpr double L1               = 0.19625;
     inline constexpr double L2               = 0.140;

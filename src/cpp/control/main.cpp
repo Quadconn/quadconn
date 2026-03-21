@@ -36,7 +36,7 @@ int main() {
         .height = -(quad::config::L1 + (quad::config::L2 / 2))
     };
 
-    while (loop_waitms(quad::config::dt_milli, quadcontrol_node)) {
+    while (loop_waitms(quad::common::DT_MILLI, quadcontrol_node)) {
         
         // receiving joystick data
         auto received_val = ipc_receive(controller_subscriber);
@@ -50,8 +50,8 @@ int main() {
 
         quad.set_command(command);
 
-        std::cout << "Sending: " << "horizontal velocity X: " << command.horizontal_velocity_x 
-         << "horizontal velocity Y: " << command.horizontal_velocity_y << std::endl;
+        std::cout << "Sending (Vx, Vy): (" << command.horizontal_velocity_x << ", "
+                  << command.horizontal_velocity_y << ")" << std::endl;
 
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step_gait();});
     }

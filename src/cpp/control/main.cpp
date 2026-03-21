@@ -30,8 +30,8 @@ int main() {
     QuadControl quad;
     BodyJointAngles angles;
     Command command = {
-        .horizontal_velocity_x = 0.4, //  [-1,1] - => down, + => up
-        .horizontal_velocity_y = -0.3, // [-1,1] - => right, + => left
+        .horizontal_velocity_x = 0.0, //  [-1,1] - => down, + => up
+        .horizontal_velocity_y = 0.0, // [-1,1] - => right, + => left
         .yaw_rate = 0.0,
         .height = -(quad::config::L1 + (quad::config::L2 / 2))
     };

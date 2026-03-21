@@ -149,7 +149,7 @@
     <parent link="body"/>
     <child link="fr_thigh"/>
     <origin rpy="0 0 0" xyz="0.12449999999999997 -0.125725 0.0"/>
-    <axis xyz="1 0 0"/>
+    <axis xyz="-1 0 0"/>
     <limit effort="1" lower="-3.14" upper="3.14" velocity="1"/>
   </joint>
   <joint name="fr_hip_pitch" type="revolute">
@@ -221,7 +221,7 @@
     <parent link="body"/>
     <child link="bl_thigh"/>
     <origin rpy="0 0 0" xyz="-0.12449999999999997 0.125725 0.0"/>
-    <axis xyz="-1 0 0"/>
+    <axis xyz="1 0 0"/>
     <limit effort="1" lower="-3.14" upper="3.14" velocity="1"/>
   </joint>
   <joint name="bl_hip_pitch" type="revolute">

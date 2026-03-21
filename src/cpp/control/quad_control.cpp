@@ -13,7 +13,7 @@
 #include "quad_common.hpp"
 #include "quad_config.hpp"
 #include "joint_angles.hpp"
-#include "command.hpp"
+#include "quad_command.hpp"
 
 namespace config = quad::config;
 namespace common = quad::common;
@@ -26,7 +26,7 @@ inline double sq(double a) {
 
 // Public Methods
 
-void QuadControl::set_command(const Command& command) {
+void QuadControl::set_command(const QuadCommand& command) {
     _command = command;
 }
 

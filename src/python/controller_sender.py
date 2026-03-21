@@ -71,6 +71,8 @@ class ControllerState:
 
         raise IOError("No gamepad found.")
 
+    def _deadzone(self, joystick_input):
+        return 0.0 if abs(joystick_input) < 0.05 else joystick_input
 
     def _monitor_loop(self):
         try:
@@ -80,10 +82,11 @@ class ControllerState:
                 if event.type == ecodes.EV_ABS:
                     val = event.value
                     code = event.code
-                    if code == 0: self.left_x = (val / 32768.0) 
-                    elif code == 1: self.left_y = -(val / 32768.0) # Inverted
-                    elif code == 3: self.right_x = (val / 32768.0)
-                    elif code == 4: self.right_y = -(val / 32768.0) # Inverted
+                    # Flipping all joystick axes to follow typical x-y plot signs
+                    if code == 0: self.left_x = self._deadzone(-val / 32768.0)
+                    elif code == 1: self.left_y = self._deadzone(-val / 32768.0)
+                    elif code == 3: self.right_x = self._deadzone(-val / 32768.0)
+                    elif code == 4: self.right_y = self._deadzone(-val / 32768.0)
                     elif code == 2: self.l2 = val / 255.0
                     elif code == 5: self.r2 = val / 255.0
                     elif code == 16: self.dpad_x = val

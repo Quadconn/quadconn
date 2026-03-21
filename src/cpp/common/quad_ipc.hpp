@@ -1,3 +1,5 @@
+#pragma once
+
 #include "iox2/iceoryx2.hpp"
 #include <optional>
 

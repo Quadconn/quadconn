@@ -1,8 +1,10 @@
-
 #pragma once
+
 #include <cstdint>
 #include <stddef.h>
 #include "iox2/iceoryx2.hpp"
+
+
 enum class SystemLogic : uint8_t {
     GamepadRunning = 0,
     QuadControlRunning = 1,

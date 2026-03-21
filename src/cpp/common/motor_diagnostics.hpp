@@ -1,8 +1,14 @@
+#pragma once
+
 #include <cstdint>
 #include <iostream>
 #include "moteus.h"
+
+
 #define MOTOR_COUNT 12
 #define GEAR_RATIO 9
+
+
 struct MotorDiagnostics {
     // mode diagnostics
     int mode; int fault; int trajectory_complete;

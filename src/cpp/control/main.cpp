@@ -1,21 +1,11 @@
 #include <iostream>
 
-#include "command.hpp"
+#include "quad_command.hpp"
 #include "joint_angles.hpp"
 #include "quad_config.hpp"
 #include "quad_control.hpp"
 #include "quad_ipc.hpp"
 #include "gamepad_data.hpp"
-
-#define HORIZONTAL_MAX 0.4
-#define VERTICAL_MAX 0.3
-
-inline double deadzone(double input_joystick) {
-    // hardcoded deadzone of 0.05 to prevent jitter
-    return (fabs(input_joystick) < 0.05f ? 
-        0.0f : 
-        input_joystick);
-}
 
 
 int main() {
@@ -29,12 +19,7 @@ int main() {
 
     QuadControl quad;
     BodyJointAngles angles;
-    Command command = {
-        .horizontal_velocity_x = 0.0, //  [-1,1] - => down, + => up
-        .horizontal_velocity_y = 0.0, // [-1,1] - => right, + => left
-        .yaw_rate = 0.0,
-        .height = -(quad::config::L1 + (quad::config::L2 / 2))
-    };
+    QuadCommand command;
 
     while (loop_waitms(quad::common::DT_MILLI, quadcontrol_node)) {
         
@@ -43,15 +28,18 @@ int main() {
         if (received_val.has_value()) {
             auto& data_ref = received_val.value();
 
-            // assigning velocities according to controller values
-            command.horizontal_velocity_x = HORIZONTAL_MAX * deadzone(data_ref.ly);
-            command.horizontal_velocity_y = -VERTICAL_MAX  * deadzone(data_ref.lx);
+            command.update(data_ref);
+            // TODO DR: When this becomes dynamic handle it better, for now just always
+            // using this height
+            command.height = -(quad::config::L1 + (quad::config::L2 / 2));
         }
 
         quad.set_command(command);
 
-        std::cout << "Sending (Vx, Vy): (" << command.horizontal_velocity_x << ", "
-                  << command.horizontal_velocity_y << ")" << std::endl;
+        std::cout << "Sending (Vx, Vy, Yaw): (" 
+                  << command.horizontal_velocity_x << ", "
+                  << command.horizontal_velocity_y << ", "
+                  << command.yaw_rate << ")" << std::endl;
 
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step_gait();});
     }

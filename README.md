@@ -77,3 +77,4 @@ conf write
 moteus_tool --target X --write-config moteus_config.txt 
 moteus_tool --target X --calibrate
 ```
+Calibration can be done with the belt drives attached.

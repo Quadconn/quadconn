@@ -1,8 +1,11 @@
+#pragma once
 #include <cstdint>
 #include <iostream>
 #include "moteus.h"
 #define MOTOR_COUNT 12
 #define GEAR_RATIO 9
+
+
 struct MotorDiagnostics {
     // mode diagnostics
     int mode; int fault; int trajectory_complete;
@@ -46,11 +49,22 @@ inline double rad2turns(double radians) {
 }
 
 namespace motor_info {
-    inline MotorDiagnostics make_diag(const mjbots::moteus::Query::Result& r) {
-        return {static_cast<int>(r.mode), r.fault, r.trajectory_complete,
-                r.position, r.velocity, r.torque,
-                r.q_current, r.d_current, r.abs_position,
-                r.power, r.motor_temperature, r.voltage, r.temperature};
+    
+    inline void populate_diag(const mjbots::moteus::Query::Result& result, MotorDiagnostics& out_diag) {
+    // Write directly into 'out_diag' (which lives in shared memory)
+    out_diag.mode = static_cast<int>(result.mode);
+    out_diag.fault = result.fault;
+    out_diag.trajectory_complete = result.trajectory_complete;
+    out_diag.position = result.position;
+    out_diag.velocity = result.velocity;
+    out_diag.torque = result.torque;
+    out_diag.q_current = result.q_current;
+    out_diag.d_current = result.d_current;
+    out_diag.abs_position = result.abs_position;
+    out_diag.power = result.power;
+    out_diag.motor_temperature = result.motor_temperature;
+    out_diag.voltage = result.voltage;
+    out_diag.temperature = result.temperature;
     }
 
     inline std::string_view mode_to_string(int mode) {

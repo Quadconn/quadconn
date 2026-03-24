@@ -7,9 +7,8 @@
 #include <map>
 
 #include "moteus.h"
-#include "../common/motor_diagnostics.hpp"
-
-#define MOTOR_NUM  6
+#include "motor_diagnostics.hpp"
+#include "motor_config.hpp"
 
 
 int main(int argc, char** argv) {
@@ -22,67 +21,89 @@ int main(int argc, char** argv) {
      rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
      rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0)};
 
-    // TODO: define once across motor interface and zeroing cpp files
-    const auto bus_a = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00");
-    const auto bus_b = std::make_shared<moteus::Fdcanusb>("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00");
-    std::map<int, std::shared_ptr<moteus::Fdcanusb>> id_to_bus = {
-        {1, bus_b},
-        {2, bus_b},
-        {3, bus_b},
-        {4, bus_a},
-        {5, bus_a},
-        {6, bus_a}
-    };
-
     // Initialize Controllers
     std::cout << "initializing motors\n";
+    std::map<std::shared_ptr<moteus::Fdcanusb>, BusGroup> bus_groups_map;
 
-    std::array<std::shared_ptr<moteus::Controller>, MOTOR_NUM> controllers;
-    {
-    int i = 0; 
-        for (auto const& [id, bus] : id_to_bus) {
-            moteus::Controller::Options options{};
-            options.id = id;
-            options.transport = bus; 
-            controllers[i] = std::make_shared<moteus::Controller>(options);
-            i++;
-        }
+    for (const auto& def : get_robot_config()) {
+        moteus::Controller::Options opts{};
+        opts.id = def.can_id;
+        opts.transport = def.bus;
+
+        // populate BusGroup directly using key-value pairs
+        // if already exists, then retrieve reference. Otherwise, create
+        // another key-value pair
+        auto& group = bus_groups_map[def.bus];
+
+        group.bus = def.bus;
+        // populate vectors once
+        group.controllers.push_back(std::make_shared<moteus::Controller>(opts));
+        group.legs.push_back(def.leg);
+        group.joint_types.push_back(def.joint_idx);
+        
+        // Pre-allocate empty frame to avoid resizing in the hot loop
+        group.frames.push_back(moteus::CanFdFrame()); 
     }
+    
+    std::vector<BusGroup> bus_groups;
+    for (auto& [bus, group] : bus_groups_map) {
+        if (bus == nullptr) {
+            std::cout << "bus in warning not connnected, program exiting early\n";
+            return 1;
+        }
+        bus_groups.push_back(std::move(group));
+    }
+
     std::cout << "clearing faults\n";
     // Stop everything to clear faults first
-    for (auto& c : controllers) { c->SetStop(); }
+    for (auto& group : bus_groups) {
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+    }
+
 
     // Execution loop
     std::cout << "starting calibration sequence\n";
-        
-    for (auto& c : controllers) {
-        // retrieve CAN id and corresponding physical angle position
-        int id = c->options().id;
-        int idx = id - 1;
-
-
-        // 2. Format the diagnostic strings
-        // d exact: sets the current runtime position to the target
-        std::string exact_cmd = "d exact " + std::to_string(zero_positions[idx]);
-        // d cfg-set-output: updates the 'motor_position.sources.0.offset' config
-        std::string sync_cmd = "d cfg-set-output " + std::to_string(zero_positions[idx]);
-        
-        try {
-            std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << " turns...\n";
-            
-            // Execute the sequence
-            c->DiagnosticCommand(exact_cmd);    // Set runtime position
-            c->DiagnosticCommand(sync_cmd);     // Sync config offset
-            c->DiagnosticCommand("conf write"); // Commit to non-volatile flash
-            
-            std::cout << "Motor " << id << " saved successfully.\n";
-        } catch (const std::exception& e) {
-            std::cerr << "Failed to calibrate motor " << id << ": " << e.what() << "\n";
+    
+    for (auto& group : bus_groups) {
+        // Build frames for just this specific bus
+        for (size_t i = 0; i < group.controllers.size(); ++i) {
+                                            // legs and joint_types are indexable by integer
+            int id = group.controllers[i]->options().id;
+            int idx = id - 1;
+            std::string exact_cmd = "d exact " + std::to_string(zero_positions[idx]);
+            // d cfg-set-output: updates the 'motor_position.sources.0.offset' config
+            std::string sync_cmd = "d cfg-set-output " + std::to_string(zero_positions[idx]);
+            try {
+                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << " turns...\n";
+                
+                // Execute the sequence
+                group.controllers[i]->DiagnosticCommand(exact_cmd);    // Set runtime position
+                group.controllers[i]->DiagnosticCommand(sync_cmd);     // Sync config offset
+                group.controllers[i]->DiagnosticCommand("conf write"); // Commit to non-volatile flash
+                
+                std::cout << "Motor " << id << " saved successfully.\n";
+            } catch (const std::exception& e) {
+                std::cerr << "Failed to calibrate motor " << id << ": " << e.what() << "\n";
+            }
         }
+        // clear all data before writing replies
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
     }
+
             
     // End safely
-    for (auto& c : controllers) { c->SetStop(); }
+    for (auto& group : bus_groups) {
+        for(size_t i = 0; i < group.controllers.size(); ++i) {
+            group.frames[i] = group.controllers[i]->MakeStop();
+        }
+        group.replies.clear();
+        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+    }
     return 0;
 }
 

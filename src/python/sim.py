@@ -9,6 +9,9 @@ import quad_common
 
 # NOTE: If you want to only visualize run this script as "python sim.py -v"
 
+JOINT_MAX_FORCE = 5.0
+GRAVITY = -9.8
+
 if __name__ == "__main__":
 
     isVisualizeOnly = False
@@ -28,12 +31,14 @@ if __name__ == "__main__":
     if not isVisualizeOnly:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         planeId = p.loadURDF("plane.urdf")
-        p.setGravity(0, 0, -9.8)
+        p.setGravity(0, 0, GRAVITY)
 
     startPos = [0,0,1]
     startOrientation = p.getQuaternionFromEuler([0,0,0])
     legId = p.loadURDF("../../urdf/basic_quad.urdf",startPos, startOrientation, useFixedBase=isVisualizeOnly)
     jointIndicies = [i for i in range(p.getNumJoints(legId))]
+    max_forces = [JOINT_MAX_FORCE] * len(jointIndicies)
+
     # Let physics server auto step the simulation
     p.setRealTimeSimulation(True)
 
@@ -50,4 +55,5 @@ if __name__ == "__main__":
                           data.contents.body_joint_angles[i].hip_pitch,
                           data.contents.body_joint_angles[i].knee_pitch])
 
-            p.setJointMotorControlArray(legId, jointIndicies, controlMode=p.POSITION_CONTROL, targetPositions=q)
+            p.setJointMotorControlArray(legId, jointIndicies, controlMode=p.POSITION_CONTROL, targetPositions=q, forces=max_forces)
+

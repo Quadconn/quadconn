@@ -19,7 +19,13 @@ int main() {
 
     QuadControl quad;
     BodyJointAngles angles;
-    QuadCommand command;
+    QuadCommand command = {
+        .horizontal_velocity_x = 0.0,
+        .horizontal_velocity_y = 0.0,
+        .yaw_rate = 0.0,
+        // NOTE: Make sure there is a default value here
+        .height = -(quad::config::L1 + (quad::config::L2 / 2))
+    };
 
     while (loop_waitms(quad::common::DT_MILLI, quadcontrol_node)) {
         

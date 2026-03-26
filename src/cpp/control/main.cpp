@@ -19,13 +19,7 @@ int main() {
 
     QuadControl quad;
     BodyJointAngles angles;
-    QuadCommand command = {
-        .horizontal_velocity_x = 0.0,
-        .horizontal_velocity_y = 0.0,
-        .yaw_rate = 0.0,
-        // NOTE: Make sure there is a default value here
-        .height = -(quad::config::L1 + (quad::config::L2 / 2))
-    };
+    QuadCommand command = {0.0};
 
     while (loop_waitms(quad::common::DT_MILLI, quadcontrol_node)) {
         
@@ -35,17 +29,15 @@ int main() {
             auto& data_ref = received_val.value();
 
             command.update(data_ref);
-            // TODO DR: When this becomes dynamic handle it better, for now just always
-            // using this height
-            command.height = -(quad::config::L1 + (quad::config::L2 / 2));
         }
 
         quad.set_command(command);
 
-        std::cout << "Sending (Vx, Vy, Yaw): (" 
+        std::cout << "Sending (Vx, Vy, Vyaw, Vheight): (" 
                   << command.horizontal_velocity_x << ", "
                   << command.horizontal_velocity_y << ", "
-                  << command.yaw_rate << ")" << std::endl;
+                  << command.yaw_rate << ", "
+                  << command.height_rate << ")" << std::endl;
 
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step_gait();});
     }

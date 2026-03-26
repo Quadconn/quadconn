@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     startPos = [0,0,1]
     startOrientation = p.getQuaternionFromEuler([0,0,0])
-    legId = p.loadURDF("../../urdf/basic_quad.urdf",startPos, startOrientation, useFixedBase=isVisualizeOnly)
+    legId = p.loadURDF("../../urdf/quad/urdf/quad.urdf",startPos, startOrientation, useFixedBase=isVisualizeOnly)
     jointIndicies = [i for i in range(p.getNumJoints(legId))]
     max_forces = [JOINT_MAX_FORCE] * len(jointIndicies)
 

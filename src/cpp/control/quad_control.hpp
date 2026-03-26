@@ -26,6 +26,11 @@ class QuadControl {
         QuadCommand _command;
         std::array<Eigen::Vector3d, quad::common::LEG_COUNT> _foot_locations;
         int _ticks = 0;
+        // This is the distance of the foot down from the body of the robot
+        // (+) -> above body
+        // (0) -> equal to body
+        // (-) -> below body
+        double _height = -(quad::config::L1 + (quad::config::L2 / 2));
 
         BodyJointAngles body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets);
 

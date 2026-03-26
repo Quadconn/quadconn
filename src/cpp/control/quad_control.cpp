@@ -28,6 +28,11 @@ inline double sq(double a) {
 
 void QuadControl::set_command(const QuadCommand& command) {
     _command = command;
+
+    double z_clearance = abs(_height + _command.height_rate);
+    if ((config::z_clearance_min < z_clearance) && (z_clearance < config::z_clearance_max)) {
+        _height += _command.height_rate;
+    }
 }
 
 
@@ -179,7 +184,7 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     // Calculate inverse of commanded body velocity for x-y (z is not taken as inverse)
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
                                -_command.horizontal_velocity_y, 
-                               (_command.height - foot_location.z()) / config::z_time_constant);
+                               (_height - foot_location.z()) / config::z_time_constant);
 
     // Get inverse position delta for this time step
     Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * common::DT;
@@ -218,11 +223,11 @@ void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, doubl
     // Calculate swing height based on how far into the swing we are
     double swing_height = 0.0;
     if (swing_proportion < 0.5) {
-        // Triangular ramp up to z clearance
-        swing_height = config::z_clearance * (swing_proportion / 0.5);
+        // Triangular ramp up to swing height delta
+        swing_height = config::z_delta_swing_height * (swing_proportion / 0.5);
     } else {
-        // Triangular ramp down from z clearance
-        swing_height = config::z_clearance * ((1 - swing_proportion ) / 0.5);
+        // Triangular ramp down from swing height delta
+        swing_height = config::z_delta_swing_height * ((1 - swing_proportion ) / 0.5);
     }
 
     // Calculate raibert touchdown location
@@ -237,7 +242,8 @@ void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, doubl
     Eigen::Vector3d pos_delta_xy = vel * common::DT;
 
     // Take z position as space between robots height and the calculated swing height
-    foot_location.z() = swing_height + _command.height;
+    // z position is the current height plus offset either up/down by swing height
+    foot_location.z() = _height + swing_height;
     // Apply positional deltas to x-y of foot location
     foot_location = foot_location + pos_delta_xy;
 }

@@ -54,13 +54,12 @@ namespace quad::config {
     }};
 
     // Kinematic Lengths
-    // TODO DR: Adjust for new lengths!
-    inline constexpr double ABDUCTION_OFFSET = 0.102;
+    inline constexpr double ABDUCTION_OFFSET = 0.10300;
     inline constexpr double L1               = 0.19625;
-    inline constexpr double L2               = 0.140;
-    inline constexpr double LEG_FB           = 0.35;     // Front-back distance from center of body to hip joint axis of rotation
-    inline constexpr double LEG_LR           = 0.125725; // Left-right distance from center of body to hip joint plane of rotation
-                                                         //
+    inline constexpr double L2               = 0.20356;
+    inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
+    inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
+
     // Time step to clamp height correction speed
     inline constexpr double z_time_constant = 0.02;
     // Max clearance between body and foot in z direction

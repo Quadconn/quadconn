@@ -9,7 +9,7 @@ import quad_common
 
 # NOTE: If you want to only visualize run this script as "python sim.py -v"
 
-JOINT_MAX_FORCE = 5.0
+JOINT_MAX_FORCE = 3.0
 GRAVITY = -9.8
 
 if __name__ == "__main__":

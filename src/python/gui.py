@@ -27,6 +27,8 @@ TELEMETRY_PORT = 808
 VIDEO_PORT = 5000
 MIC_TO_SPEAKER_PORT = 3004
 SPEAKER_TO_MIC_PORT = 3005
+VIDEO_RECORD_PORT = 5001
+AUDIO_RECORD_PORT = 3006
 YOLO_WEIGHTS = 'yolov8n.pt'
 
 ## Standard Imports ##
@@ -35,6 +37,8 @@ import subprocess
 import numpy as np
 import cv2
 import traceback
+import datetime
+import time
 from ctypes import sizeof, memmove, addressof
 
 # GStreamer Integration: Handles raw H.264 stream decoding
@@ -43,7 +47,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
 # PyQt6 UI Components
-from PyQt6.QtCore import QThread, pyqtSignal, Qt, QMutex
+from PyQt6.QtCore import QThread, pyqtSignal, Qt, QMutex, QTimer
 from PyQt6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QHBoxLayout,
                              QWidget, QGridLayout, QPushButton, QLineEdit, QSlider)
 from PyQt6.QtGui import QImage, QPixmap
@@ -65,24 +69,31 @@ class AudioReceiveThread(QThread):
         self.daemon = True
 
     def run(self):
-        # GStreamer Launch String -> receives OPUS audio via UDP on Port 3004 with a 100ms jitter buffer for stability
+        # Uses a 'tee' to play audio locally while simultaneously forwarding raw packets to an internal port for recording without causing latency
         gst_str = (
             f"udpsrc port={MIC_TO_SPEAKER_PORT} ! "
             "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96 ! "
-            "rtpjitterbuffer latency=100 ! rtpopusdepay ! opusdec ! audioconvert ! audioresample ! "
-            "volume name=vol_control volume=1.0 ! autoaudiosink sync=false"
+            "tee name=at "
+            "at. ! queue ! rtpjitterbuffer latency=100 ! rtpopusdepay ! opusdec ! audioconvert ! audioresample ! "
+            "volume name=vol_control volume=1.0 ! autoaudiosink sync=false "
+            f"at. ! queue ! udpsink host=127.0.0.1 port={AUDIO_RECORD_PORT} sync=false"
         )
         self.pipeline = Gst.parse_launch(gst_str)
         self.volume_element = self.pipeline.get_by_name("vol_control")
         self.pipeline.set_state(Gst.State.PLAYING)
         
-        loop = GLib.MainLoop()
-        loop.run()
+        self.loop = GLib.MainLoop()
+        self.loop.run()
 
     def set_volume(self, value):
         # Maps slider value to GStreamer volume property (0.0 to 1.0)
         if self.volume_element:
             self.volume_element.set_property("volume", value / 100.0)
+
+    def stop(self):
+        # Safely stops the GLib loop and releases the GStreamer hardware
+        if self.loop: self.loop.quit()
+        if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
 
 class AudioSendThread(QThread):
     # Captures local Mac microphone audio and sends it to the robot's speakers on Port 3005
@@ -102,13 +113,18 @@ class AudioSendThread(QThread):
         self.pipeline = Gst.parse_launch(gst_str)
         self.pipeline.set_state(Gst.State.PLAYING)
         
-        loop = GLib.MainLoop()
-        loop.run()
+        self.loop = GLib.MainLoop()
+        self.loop.run()
 
     def set_mute(self, is_muted):
         # Toggles the pipeline state between NULL and PLAYING to mute the microphone
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL if is_muted else Gst.State.PLAYING)
+
+    def stop(self):
+        # Safely stops the GLib loop and releases the GStreamer hardware
+        if self.loop: self.loop.quit()
+        if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
 
 ## WORKER THREADS (AI & TELEMETRY) ##
 
@@ -220,6 +236,7 @@ class VideoThread(QThread):
         self.robot_ip = "100.81.189.79"
         self.host_ip = "" # Your Tailscale IP
         self.robot_exec = "/home/quadconn/gui_branch/quadconn/build/camera_stream"
+        self.record_pipeline = None
 
         self.ai_enabled = True
         self.pipeline = None
@@ -232,17 +249,23 @@ class VideoThread(QThread):
         self.ai_worker.model_loaded.connect(lambda: self.ai_status_signal.emit("READY"))
         self.latest_ai_plot = None
 
+        # Recording State
+        self.is_recording = False
+        self.video_writer = None
+        self.record_mutex = QMutex()
+
     def run(self):
         # Start AI worker and GStreamer pipeline
         self.ai_status_signal.emit("LOADING")
         self.ai_worker.start()
 
-        # GStreamer Launch String: Receives H.264 via UDP on Port 5000
+        # Uses a 'tee' to split the stream for live AI dashboard processing and raw packet forwarding to the internal recording port
         gst_str = (
             f"udpsrc port={VIDEO_PORT} ! "
-            "application/x-rtp,media=(string)video,clock-rate=(int)90000,encoding-name=(string)H264,payload=(int)96 ! "
-            "rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! "
-            "video/x-raw,format=BGR ! appsink name=sink emit-signals=True sync=false"
+            "application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=96 ! "
+            "tee name=t "
+            "t. ! queue ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! video/x-raw,format=BGR ! appsink name=sink emit-signals=True sync=false "
+            f"t. ! queue ! udpsink host=127.0.0.1 port={VIDEO_RECORD_PORT} sync=false"
         )
         self.pipeline = Gst.parse_launch(gst_str)
         sink = self.pipeline.get_by_name("sink")
@@ -252,6 +275,60 @@ class VideoThread(QThread):
         # Main loop to keep GStreamer signals alive
         self.loop = GLib.MainLoop()
         self.loop.run()
+
+    def start_recording(self, filename):
+        # Initializes the GStreamer recording pipeline
+        self.record_mutex.lock()
+        try:
+            # Launches a recording pipeline with a full RTP handshake and timestamp resetting to ensure immediate, synchronized MP4 file generation
+            gst_record_str = (
+                f"mp4mux name=mux ! filesink location={filename} "
+                f"udpsrc port={VIDEO_RECORD_PORT} timeout=1000000000 do-timestamp=true ! "
+                f"application/x-rtp,media=video,clock-rate=90000,encoding-name=H264,payload=96 ! "
+                f"rtph264depay ! h264parse config-interval=-1 ! queue max-size-buffers=1000 ! mux.video_0 "
+                f"udpsrc port={AUDIO_RECORD_PORT} timeout=1000000000 do-timestamp=true ! "
+                f"application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96 ! "
+                f"rtpopusdepay ! opusdec ! audioconvert ! audioresample ! avenc_aac ! queue max-size-buffers=1000 ! mux.audio_0"
+            )
+            
+            self.record_pipeline = Gst.parse_launch(gst_record_str)
+            self.record_pipeline.set_state(Gst.State.PLAYING)
+            self.is_recording = True
+            print(f"Recording started: {filename}")
+            
+        except Exception as e:
+            print(f"FAILED TO START RECORDING: {e}")
+            self.is_recording = False
+            
+        finally:
+            self.record_mutex.unlock()
+
+    def stop_recording(self):
+        # Safely stops the recording pipeline without freezing the dashboard
+        self.record_mutex.lock()
+        if not self.is_recording:
+            self.record_mutex.unlock()
+            return
+            
+        self.is_recording = False
+        pipe = self.record_pipeline
+        self.record_pipeline = None
+        self.record_mutex.unlock()
+
+        # Finalize in a background thread because Gst.State.NULL is a blocking call
+        def finalize():
+            if pipe:
+                print("Finalizing MP4 file in background...")
+                # Send End-of-Stream (EOS) so the MP4 muxer writes the file header
+                pipe.send_event(Gst.Event.new_eos())
+                
+                # Wait 1s for the file to finalize on disk before killing the pipeline
+                time.sleep(1.0)
+                pipe.set_state(Gst.State.NULL)
+                print("Recording saved and finalized successfully.")
+
+        import threading
+        threading.Thread(target=finalize, daemon=True).start()
 
     def start_remote_hardware(self):
         # Triggers the robot's camera binary and two-way audio streams via SSH
@@ -326,6 +403,7 @@ class VideoThread(QThread):
         if self.loop: self.loop.quit()
         if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
         self.ai_worker.running = False
+        self.stop_recording()
         subprocess.run(f"ssh -o ConnectTimeout=2 quadconn@{self.robot_ip} \"sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0\"", shell=True)
         self.quit()
 
@@ -390,6 +468,12 @@ class QuadconnDashboard(QWidget):
         self.btn_ai.setStyleSheet("border: 1px solid #00FF00; color: #00FF00; padding: 10px;")
         self.btn_ai.clicked.connect(self.toggle_ai)
         self.sidebar.addWidget(self.btn_ai)
+
+        # Record Function
+        self.btn_record = QPushButton("START RECORDING")
+        self.btn_record.setStyleSheet("background-color: #222; border: 1px solid #FF0000; color: #FF0000; padding: 10px; font-weight: bold;")
+        self.btn_record.clicked.connect(self.toggle_recording)
+        self.sidebar.addWidget(self.btn_record)
         
         # 12-Motor Grid
         self.grid = QGridLayout()
@@ -421,6 +505,11 @@ class QuadconnDashboard(QWidget):
         self.audio_recv_thread = AudioReceiveThread(); self.audio_recv_thread.start()
         self.audio_send_thread = AudioSendThread(self.video_thread.robot_ip); self.audio_send_thread.start()
 
+        # Timer Initialization
+        self.record_timer = QTimer()
+        self.record_timer.timeout.connect(self.update_recording_timer)
+        self.record_start_time = 0
+
     def restart_hardware_action(self):
         # Passes manual host IP to video thread and triggers robot
         self.video_thread.host_ip = self.ip_input.text()
@@ -432,6 +521,44 @@ class QuadconnDashboard(QWidget):
         self.audio_send_thread.set_mute(is_muted)
         self.btn_mic.setText(f"MIC: {'MUTED' if is_muted else 'UNMUTED'}")
         self.btn_mic.setStyleSheet(f"background-color: #222; border: 1px solid {'#FF0000' if is_muted else '#00FF00'}; color: {'#FF0000' if is_muted else '#00FF00'}; padding: 8px;")
+
+    def toggle_recording(self):
+        # Toggles the recording state and updates the UI button styling
+        if not self.video_thread.is_recording:
+            # Check for or create a recordings directory
+            rec_folder = "recordings"
+            if not os.path.exists(rec_folder):
+                os.makedirs(rec_folder)
+                print(f"Created directory: {rec_folder}")
+
+            now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            # Save the file into the new folder
+            filename = os.path.join(rec_folder, f"quadconn_test_{now}.mp4")
+            
+            try:
+                self.video_thread.start_recording(filename)
+                
+                # Check if it actually started before updating UI
+                if self.video_thread.is_recording:
+                    self.record_start_time = time.time()
+                    self.record_timer.start(1000)
+                    self.btn_record.setText("STOP RECORDING")
+                    self.btn_record.setStyleSheet("background-color: #FF0000; color: white; padding: 10px; font-weight: bold;")
+            except Exception as e:
+                print(f"GUI Recording Error: {e}")
+
+        else:
+            # Stop logic
+            self.video_thread.stop_recording()
+            self.record_timer.stop()
+            self.btn_record.setText("START RECORDING")
+            self.btn_record.setStyleSheet("background-color: #222; border: 1px solid #FF0000; color: #FF0000; padding: 10px; font-weight: bold;")
+
+    def update_recording_timer(self):
+        # Calculate elapsed time and updates the button text
+        elapsed = int(time.time() - self.record_start_time)
+        mins, secs = divmod(elapsed, 60)
+        self.btn_record.setText(f"STOP RECORDING ({mins:02}:{secs:02})")
 
     def update_speaker_volume(self, value):
         # Passes slider value to the local audio receiver

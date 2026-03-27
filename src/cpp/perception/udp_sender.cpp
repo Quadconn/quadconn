@@ -15,8 +15,8 @@
 #include <stdlib.h>
 #include <iostream>
 
-#include "../common/motor_diagnostics.hpp"
-#include "../common/quad_ipc.hpp"
+#include "motor_diagnostics.hpp"
+#include "quad_ipc.hpp"
 
 const char* OPERATOR_IP = "100.119.158.85";
 const char* OPERATOR_PORT = "808";
@@ -50,10 +50,12 @@ int resolvehelper(const char* hostname, int family, const char* service, sockadd
 int main()
 {
     using namespace iox2;
-    auto node = NodeBuilder()
-            .name(NodeName::create("udp_sender")
-            .value()).create<ServiceType::Ipc>().value();
-    
+    /* Declaring Nodes */
+    auto node = make_node("diagnostics");
+
+    auto diagnostics_subscriber = make_subscriber<MotorDiagnosticsArray>
+                                 (make_service<MotorDiagnosticsArray>("MotorDiagnosticsArray", node));
+    /* End Declaration of Nodes */
     int result = 0;
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     char szIP[100];
@@ -79,29 +81,13 @@ int main()
        std::cout << "error: " << lasterror;
        exit(1);
     }
-
+    MotorDiagnosticsArray real_data; 
     while (node.wait(UPDATE_RATE).has_value()) {
 
 
-        MotorDiagnosticsArray dummy_data = {};
-        for (int i = 0; i < MOTOR_COUNT; i++) {
-            
-            dummy_data.motor_instance[i].abs_position = randomFloat();
-            dummy_data.motor_instance[i].d_current = randomFloat();
-            dummy_data.motor_instance[i].fault = rand();
-            dummy_data.motor_instance[i].mode = rand();
-            dummy_data.motor_instance[i].motor_temperature = randomFloat();
-            dummy_data.motor_instance[i].position = randomFloat();
-            dummy_data.motor_instance[i].power = randomFloat();
-            dummy_data.motor_instance[i].q_current = randomFloat();
-            dummy_data.motor_instance[i].temperature = randomFloat();
-            dummy_data.motor_instance[i].torque = randomFloat();
-            dummy_data.motor_instance[i].trajectory_complete = rand() % 2;
-            dummy_data.motor_instance[i].velocity = randomFloat();
-            dummy_data.motor_instance[i].voltage = randomFloat();
-        }
+        real_data = ipc_receive(diagnostics_subscriber).value_or(real_data);
 
-        ssize_t sent_bytes = sendto(sock, &dummy_data, sizeof(dummy_data), 0, 
+        ssize_t sent_bytes = sendto(sock, &real_data, sizeof(real_data), 0, 
                                 (struct sockaddr*)&addrDest, sizeof(addrDest));
 
         std::cout << sent_bytes << " bytes sent" << std::endl;

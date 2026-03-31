@@ -65,7 +65,16 @@ at once, but running them individually allows each terminal to display debug inf
 
 # Configuring Motor Controllers
 The file moteus_config.txt can be used to set the configuration for a motor. The only 
-configuration option that needs to be manually changed in tview is the can id.
-```bash
-moteus_tool --restore-config moteus_config.txt
+configuration option that needs to be manually changed in tview is the can id. Steps:
+1. open tview and run the following replacing 'X' with the desired can ID.
 ```
+conf default
+conf set id.id X
+conf write
+```
+2. Run the following from command line
+```bash
+moteus_tool --target X --write-config moteus_config.txt 
+moteus_tool --target X --calibrate
+```
+Calibration can be done with the belt drives attached.

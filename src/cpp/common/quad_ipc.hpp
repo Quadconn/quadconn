@@ -73,6 +73,7 @@ inline void ipc_send(const T& data, iox2::Publisher<iox2::ServiceType::Ipc, T, v
 
 
 // simple wrapper for receiving data. Safely unwraps the nested iceoryx2 types.
+// use 
 template<typename T>
 inline std::optional<T> ipc_receive(iox2::Subscriber<iox2::ServiceType::Ipc, T, void>& subscriber) {
 

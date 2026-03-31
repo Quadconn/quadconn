@@ -30,4 +30,5 @@ target_link_libraries(udp_sender
         PkgConfig::GST  # This automatically handles includes AND libs
         iceoryx2-cxx::static-lib-cxx
         moteus
+        common
 )

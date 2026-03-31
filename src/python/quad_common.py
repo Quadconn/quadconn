@@ -1,3 +1,7 @@
+# Timing
+DT = 0.01
+DT_MILLI = int(DT * 1E3)
+
 # Array sizes
 LEG_COUNT = 4;
 

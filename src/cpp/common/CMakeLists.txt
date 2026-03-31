@@ -9,7 +9,6 @@ target_sources(common
             quad_ipc.hpp
             quad_common.hpp
             joint_angles.hpp
-            command.hpp
             
 )
 

@@ -1,6 +1,10 @@
+#pragma once
+
 #include <cstdint>
 #include <iostream>
 
+// NOTE: Ensure this matches the python game pad code update rate from iceoryx2 node or UDP
+inline constexpr float GAMEPAD_DT = 10.0E-3;
 
 struct GamepadData {
     double lx; double ly; double rx; double ry;

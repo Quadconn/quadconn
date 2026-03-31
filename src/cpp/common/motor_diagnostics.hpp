@@ -1,7 +1,10 @@
 #pragma once
+
 #include <cstdint>
 #include <iostream>
 #include "moteus.h"
+
+
 #define MOTOR_COUNT 12
 #define GEAR_RATIO 9
 

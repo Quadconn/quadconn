@@ -13,7 +13,7 @@
 #include "quad_common.hpp"
 #include "quad_config.hpp"
 #include "joint_angles.hpp"
-#include "command.hpp"
+#include "quad_command.hpp"
 
 namespace config = quad::config;
 namespace common = quad::common;
@@ -26,8 +26,13 @@ inline double sq(double a) {
 
 // Public Methods
 
-void QuadControl::set_command(const Command& command) {
+void QuadControl::set_command(const QuadCommand& command) {
     _command = command;
+
+    double z_clearance = abs(_height + _command.height_rate);
+    if ((config::z_clearance_min < z_clearance) && (z_clearance < config::z_clearance_max)) {
+        _height += _command.height_rate;
+    }
 }
 
 
@@ -138,17 +143,15 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
 // clock wise direction
 void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_index) {
     // For back legs hip roll must go opposite direction than front legs since they 
-    // are mounted reversed 
+    // are mounted reversed (except for back left)
     //
     // For right side legs hip pitch and knee pitch must go opposite direction than
     // left side legs
-    if (leg_index == common::FL) {
-        return;
-    } else if (leg_index == common::FR) {
+    if (leg_index == common::FR) {
+        angles.hip_roll   = -angles.hip_roll;
         angles.hip_pitch  = -angles.hip_pitch;
         angles.knee_pitch = -angles.knee_pitch;
-    } else if (leg_index == common::BL) {
-        angles.hip_roll   = -angles.hip_roll;
+
     } else if (leg_index == common::BR) {
         angles.hip_roll   = -angles.hip_roll;
         angles.hip_pitch  = -angles.hip_pitch;
@@ -181,14 +184,14 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     // Calculate inverse of commanded body velocity for x-y (z is not taken as inverse)
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
                                -_command.horizontal_velocity_y, 
-                               (_command.height - foot_location.z()) / config::z_time_constant);
+                               (_height - foot_location.z()) / config::z_time_constant);
 
     // Get inverse position delta for this time step
-    Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * config::dt;
+    Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * common::DT;
 
 
     // Calculate inverse body rotation delta for this time step to achieve commanded yaw rate
-    Eigen::Matrix3d inv_rot_delta_z = Eigen::AngleAxisd(-_command.yaw_rate * config::dt, 
+    Eigen::Matrix3d inv_rot_delta_z = Eigen::AngleAxisd(-_command.yaw_rate * common::DT, 
                                                   Eigen::Vector3d::UnitZ()).toRotationMatrix();
 
 
@@ -204,11 +207,11 @@ Eigen::Vector3d QuadControl::swing_raibert_touchdown_location(std::size_t leg_in
 
     Eigen::Vector3d pos_delta_xy = vel_xy * 
                                    config::alpha * 
-                                   config::stance_ticks * config::dt;
+                                   config::stance_ticks * common::DT;
     // Rotational delta in z for current time step to achieve desired body yaw from commanded yaw rate
     Eigen::Matrix3d rot_delta_z = Eigen::AngleAxisd(_command.yaw_rate * 
                                                     config::beta *
-                                                    config::stance_ticks * config::dt, 
+                                                    config::stance_ticks * common::DT, 
                                                     Eigen::Vector3d::UnitZ()).toRotationMatrix();
     // Apply rotational and positional deltas to default stance
     return rot_delta_z * config::DEFAULT_STANCE[leg_index] + pos_delta_xy;
@@ -220,26 +223,27 @@ void QuadControl::swing_next_foot_location(Eigen::Vector3d& foot_location, doubl
     // Calculate swing height based on how far into the swing we are
     double swing_height = 0.0;
     if (swing_proportion < 0.5) {
-        // Triangular ramp up to z clearance
-        swing_height = config::z_clearance * (swing_proportion / 0.5);
+        // Triangular ramp up to swing height delta
+        swing_height = config::z_delta_swing_height * (swing_proportion / 0.5);
     } else {
-        // Triangular ramp down from z clearance
-        swing_height = config::z_clearance * ((1 - swing_proportion ) / 0.5);
+        // Triangular ramp down from swing height delta
+        swing_height = config::z_delta_swing_height * ((1 - swing_proportion ) / 0.5);
     }
 
     // Calculate raibert touchdown location
     Eigen::Vector3d touchdown_location = swing_raibert_touchdown_location(leg_index);
 
     // Velocity needed to get to touchdown location within the time left in the swing
-    double time_left = config::dt * (config::swing_ticks * (1.0 - swing_proportion));
+    double time_left = common::DT * (config::swing_ticks * (1.0 - swing_proportion));
     Eigen::Vector3d vel = (touchdown_location - foot_location) / time_left;
     vel.z() = 0.0;
 
     // Position delta for this time step
-    Eigen::Vector3d pos_delta_xy = vel * config::dt;
+    Eigen::Vector3d pos_delta_xy = vel * common::DT;
 
     // Take z position as space between robots height and the calculated swing height
-    foot_location.z() = swing_height + _command.height;
+    // z position is the current height plus offset either up/down by swing height
+    foot_location.z() = _height + swing_height;
     // Apply positional deltas to x-y of foot location
     foot_location = foot_location + pos_delta_xy;
 }

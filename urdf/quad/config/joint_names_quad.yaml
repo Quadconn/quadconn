@@ -1,0 +1,1 @@
+controller_joint_names: ['', 'fl_hip_roll', 'fl_hip_pitch', 'fl_knee_pitch', 'fr_hip_roll', 'fr_hip_pitch', 'fr_knee_pitch', 'bl_hip_roll', 'bl_hip_pitch', 'bl_knee_pitch', 'br_hip_roll', 'br_hip_pitch', 'br_knee_pitch', ]

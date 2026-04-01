@@ -33,10 +33,30 @@ void QuadControl::set_command(const QuadCommand& command) {
     if ((config::z_clearance_min < z_clearance) && (z_clearance < config::z_clearance_max)) {
         _height += _command.height_rate;
     }
+
+    _mode = _command.is_trot_mode? Mode::TROT : Mode::REST;
 }
 
 
-BodyJointAngles QuadControl::step_gait() {
+BodyJointAngles QuadControl::step() {
+
+    if (_mode == Mode::TROT) {
+        step_gait();
+
+    } else if (_mode == Mode::REST) {
+        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+            _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
+        }
+    }
+
+    _ticks++;
+    return body_inverse_kinematics(_foot_locations);
+}
+
+// Private Methods
+
+// Step gait sequence forward one time step
+void QuadControl::step_gait() {
 
     for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
         // Given the contact phase (swing or overlap) find the contact mode (swing or stance) for this leg
@@ -55,14 +75,8 @@ BodyJointAngles QuadControl::step_gait() {
             swing_next_foot_location(_foot_locations[i], swing_proportion, i);
         }
     }
-
-    _ticks++;
-
-
-    return body_inverse_kinematics(_foot_locations);
 }
 
-// Private Methods
 
 BodyJointAngles QuadControl::body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets) {
     BodyJointAngles angles;
@@ -159,6 +173,7 @@ void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_in
     }
 }
 
+
 Eigen::Vector3d QuadControl::leg_forward_kinematics(const LegJointAngles& angles) {
     Eigen::Vector3d result;
     
@@ -185,7 +200,6 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
                                -_command.horizontal_velocity_y, 
                                (_height - foot_location.z()) / config::z_time_constant);
-
     // Get inverse position delta for this time step
     Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * common::DT;
 

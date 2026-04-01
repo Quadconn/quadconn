@@ -87,12 +87,10 @@ namespace quad::config {
     };
 
     // Default/Idle foot locations relative to center of body
-    // TODO DR: Make the z location 0 for all
-    inline constexpr double DEFAULT_Z = -(L1 + (L2 / 2));
     inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> DEFAULT_STANCE {
-        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , DEFAULT_Z},
-        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), DEFAULT_Z},
-        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , DEFAULT_Z},
-        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), DEFAULT_Z},
+        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
 };

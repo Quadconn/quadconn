@@ -20,10 +20,17 @@ struct QuadCommand {
         } else {
             height_rate = 0.0;
         }
+
+        if (gamepad.Start && !prev_start_press) {
+            is_trot_mode = !is_trot_mode;
+        }
+        prev_start_press = gamepad.Start;
     }
 
     double horizontal_velocity_x = 0.0;
     double horizontal_velocity_y = 0.0;
     double yaw_rate = 0.0;
     double height_rate = 0.0;
+    bool   is_trot_mode = false;
+    int    prev_start_press = 0;
 };

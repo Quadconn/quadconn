@@ -1,48 +1,22 @@
 import evdev
 from evdev import ecodes
 import threading
-import ctypes
-import time
 import iceoryx2 as iox2
-# --- 1. The C-Compatible Data Structure ---
-class GamepadData(ctypes.Structure):
-    _fields_ = [
-        ("lx", ctypes.c_double),
-        ("ly", ctypes.c_double),
-        ("rx", ctypes.c_double),
-        ("ry", ctypes.c_double),
-        ("dpad_x", ctypes.c_int), 
-        ("dpad_y", ctypes.c_int), 
-        ("RT", ctypes.c_double),
-        ("LT", ctypes.c_double),
-        ("A", ctypes.c_int),
-        ("B", ctypes.c_int),
-        ("X", ctypes.c_int),
-        ("Y", ctypes.c_int),
-        ("Home", ctypes.c_int),
-        ("Start", ctypes.c_int),
-        ("Back", ctypes.c_int),
-        ("L3", ctypes.c_int),
-        ("R3", ctypes.c_int),
-        ("RB", ctypes.c_int),
-        ("LB", ctypes.c_int)
-    ]
+from gamepad_data import GamepadData
+from system_logic import SystemLogic, to_event_id
 
-    def __str__(self):
-        return f"GamepadData {{dpad_x: {self.dpad_x},  dpad_y: {self.dpad_y}, A: {self.A}, B: {self.B}, X: {self.X}, Y: {self.Y}, Home: {self.Home}, Start: {self.Start}, Back: {self.Back}, L3: {self.L3}, R3: {self.R3}, lx: {self.lx:.2f}, ly: {self.ly:.2f}, rx: {self.rx:.2f}, ry: {self.ry:.2f}, RB: {self.RB}, RT: {self.RT:.2f}, LB: {self.LB}, LT: {self.LT:.2f} }}"
 
-    @staticmethod
-    def type_name() -> str:
-        return "GamepadData"
 
-# --- 2. The Controller Logic ---
+
+
+# --- The Controller Logic ---
 class ControllerState:
     # Standard Linux Xbox Button Codes
     BTN_CONSTANTS = {
         'A': 304, 'B': 305, 'X': 307, 'Y': 308,
         'LB': 310, 'RB': 311,
         'LS_CLK': 317, 'RS_CLK': 318,
-        'BACK': 314, 'START': 315, 'GUIDE': 316
+        'SELECT': 314, 'START': 315, 'GUIDE': 316
     }
 
     def __init__(self, device_path=None):
@@ -97,6 +71,8 @@ class ControllerState:
 
         raise IOError("No gamepad found.")
 
+    def _deadzone(self, joystick_input):
+        return 0.0 if abs(joystick_input) < 0.05 else joystick_input
 
     def _monitor_loop(self):
         try:
@@ -106,10 +82,11 @@ class ControllerState:
                 if event.type == ecodes.EV_ABS:
                     val = event.value
                     code = event.code
-                    if code == 0: self.left_x = val / 32768.0
-                    elif code == 1: self.left_y = -val / 32768.0 # Inverted
-                    elif code == 3: self.right_x = val / 32768.0
-                    elif code == 4: self.right_y = -val / 32768.0 # Inverted
+                    # Flipping all joystick axes to follow typical x-y plot signs
+                    if code == 0: self.left_x = self._deadzone(-val / 32768.0)
+                    elif code == 1: self.left_y = self._deadzone(-val / 32768.0)
+                    elif code == 3: self.right_x = self._deadzone(-val / 32768.0)
+                    elif code == 4: self.right_y = self._deadzone(-val / 32768.0)
                     elif code == 2: self.l2 = val / 255.0
                     elif code == 5: self.r2 = val / 255.0
                     elif code == 16: self.dpad_x = val
@@ -138,7 +115,7 @@ class ControllerState:
             Y=btn('Y'),
             Home=btn('GUIDE'),
             Start=btn('START'),
-            Back=btn('BACK'),
+            Select=btn('SELECT'),
             L3=btn('LS_CLK'),
             R3=btn('RS_CLK'),
             LB=btn('LB'),
@@ -169,21 +146,49 @@ if __name__ == "__main__":
     )
     publisher = service.publisher_builder().create()
 
+    # create event-based node
+    start_motors = iox2.EventId.new(1)
+    stop_motors = iox2.EventId.new(2)
+
+    event_service = (
+        node
+        .service_builder(iox2.ServiceName.new("SystemLogic"))
+        .event()
+        .open_or_create()
+    )
+
+    notifier = event_service.notifier_builder().create() 
+
+
+
     try:
+
+        prev_data = controller.read()
         while True:
             node.wait(cycle_time)
 
-            # constructing directly in sample, cannot print
+            # initialize data to make notifiers
             sample = publisher.loan_uninit()
+            data = controller.read()
             if sample is not None:
                 sample = sample.write_payload(
-                    controller.read()
+                    data 
                 )
                 sample.send()
                 # print(f"\r{data}", end="")
             else:
                 print("could not loan memory")
             
+            # notifiers
+            if data.Start:
+                notifier.notify_with_custom_event_id(
+                    to_event_id(SystemLogic.StartMotors))
+
+            if data.Select:
+                notifier.notify_with_custom_event_id(
+                    to_event_id(SystemLogic.KillMotors))
+
+            prev_data = data
             # debug remove later
             
             

@@ -6,7 +6,7 @@
 
 #include "quad_config.hpp"
 #include "joint_angles.hpp"
-#include "command.hpp"
+#include "quad_command.hpp"
 
 class QuadControl {
     public:
@@ -15,7 +15,7 @@ class QuadControl {
         {};
 
         // Set the stored command for use in gait calculations
-        void set_command(const Command& command);
+        void set_command(const QuadCommand& command);
 
         // Advance the gait sequence for this time step
         BodyJointAngles step_gait();
@@ -23,9 +23,14 @@ class QuadControl {
 
 
     private:
-        Command _command;
+        QuadCommand _command;
         std::array<Eigen::Vector3d, quad::common::LEG_COUNT> _foot_locations;
         int _ticks = 0;
+        // This is the distance of the foot down from the body of the robot
+        // (+) -> above body
+        // (0) -> equal to body
+        // (-) -> below body
+        double _height = -(quad::config::L1 + (quad::config::L2 / 2));
 
         BodyJointAngles body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets);
 

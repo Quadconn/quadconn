@@ -35,19 +35,6 @@ def make_publisher(service: Any) -> Any:
 
 # --- Execution & IPC Wrappers ---
 
-def loop_waitms(ms: int, node: Any) -> bool:
-    """
-    Waits for a specified duration on the node.
-    Safely catches the iceoryx2 Interrupt exception so Ctrl+C 
-    doesn't crash the shared memory backend!
-    """
-    try:
-        node.wait(iox2.Duration.from_millis(ms))
-        return True
-    except Exception: 
-        # Catches KeyboardInterrupt or iox2's NodeWaitFailure
-        return False
-
 
 def ipc_send(data: T, publisher: Any) -> bool:
     """

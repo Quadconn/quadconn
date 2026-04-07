@@ -1,6 +1,10 @@
 #pragma once
 
 namespace quad::common {
+    // Timing
+    inline constexpr double DT        = 0.01;
+    inline constexpr int    DT_MILLI  = DT * 1E3;
+
     // Array sizes
     inline constexpr int LEG_COUNT = 4;
 

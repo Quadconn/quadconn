@@ -1,0 +1,10 @@
+# Place core python packages used in the project here. Only add the main module you're
+# using, not its dependencies, let the package manager handle installing the modules
+# dependencies.
+
+# Utility Packages Used In Development Only
+
+pybullet         # Simulator / Visualization
+sympy            # Symbolic math scripting
+moteus-gui       # Motor controller configuration
+xacro            # URDF generation

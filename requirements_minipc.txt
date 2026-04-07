@@ -2,8 +2,7 @@
 # using, not its dependencies, let the package manager handle installing the modules
 # dependencies.
 
+# Core Mini PC Packages
+
 iceoryx2==0.8.1  # Inter-process communication
-pybullet         # Simulator / Visualization
-sympy            # Symbolic math scripting
-moteus-gui       # Motor controller configuration
-xacro            # URDF generation
+evdev            # Controller Code

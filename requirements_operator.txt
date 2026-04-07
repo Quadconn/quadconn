@@ -1,4 +1,9 @@
-# Operator Required Packages/Libraries
+# Place core python packages used in the project here. Only add the main module you're
+# using, not its dependencies, let the package manager handle installing the modules
+# dependencies.
+
+# Core Operator PC Packages
+
 PyQt6
 numpy
 opencv-python-headless

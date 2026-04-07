@@ -124,7 +124,8 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     // ---- Looking at side of leg normal to tilted z-axis -------
     
     // Angle between tilted negative z-axis and the hip to foot vector
-    double theta = std::atan2(-target.x(), d_hip_foot_yz);
+    double theta = (leg_index == common::FL || leg_index == common::FR)?
+                   std::atan2(-target.x(), d_hip_foot_yz) : std::atan2(target.x(), d_hip_foot_yz);
 
     // Distance between hip and foot
     double d_hip_foot = std::sqrt(sq(d_hip_foot_yz) + sq(target.x()));

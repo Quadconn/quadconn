@@ -21,9 +21,8 @@ struct QuadCommand {
             height_rate = 0.0;
         }
 
-        if (gamepad.Start && !prev_start_press) {
-            is_trot_mode = !is_trot_mode;
-        }
+        is_toggle_mode = (gamepad.Start && !prev_start_press)? true : false;
+
         prev_start_press = gamepad.Start;
     }
 
@@ -31,6 +30,6 @@ struct QuadCommand {
     double horizontal_velocity_y = 0.0;
     double yaw_rate = 0.0;
     double height_rate = 0.0;
-    bool   is_trot_mode = false;
+    bool   is_toggle_mode = false;
     int    prev_start_press = 0;
 };

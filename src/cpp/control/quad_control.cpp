@@ -34,7 +34,11 @@ void QuadControl::set_command(const QuadCommand& command) {
         _height += _command.height_rate;
     }
 
-    _mode = _command.is_trot_mode? Mode::TROT : Mode::REST;
+    if (_command.is_toggle_mode && _mode == Mode::TROT) {
+        _mode = Mode::REST;
+    } else if (_command.is_toggle_mode && _mode == Mode::REST) {
+        _mode = Mode::TROT;
+    }
 }
 
 
@@ -131,8 +135,10 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     cos_trident = std::clamp(cos_trident, -ACOS_CLAMP, ACOS_CLAMP);
     double trident = std::acos(cos_trident);
 
-    // Angle of link L1 wrt the tilted negative z-axis
-    double hip_pitch = theta + trident;
+    // Angle of link L1 wrt the tilted negative z-axis (+/- makes hip bend backward/forward)
+    // must be opposite sign of knee_pitch for valid solution 
+    double hip_pitch = (leg_index == common::FL || leg_index == common::FR)? 
+                       (theta + trident) : -(theta + trident);
 
     // Angle between links L1 and L2
     double cos_beta = (sq(config::L1) + sq(config::L2) - sq(d_hip_foot)) / 
@@ -141,7 +147,9 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     double beta = std::acos(cos_beta);
 
     // Angle of link L2 wrt hip pitch (+/- makes knee bend forward/backward)
-    double knee_pitch = -(std::numbers::pi - beta);
+    // must be opposite sign of hip_pitch for valid solution 
+    double knee_pitch = (leg_index == common::FL || leg_index == common::FR)?
+                        -(std::numbers::pi - beta) : (std::numbers::pi - beta);
 
     LegJointAngles leg_joint_angles = LegJointAngles {.hip_roll   = hip_roll, 
                                                       .hip_pitch  = hip_pitch,

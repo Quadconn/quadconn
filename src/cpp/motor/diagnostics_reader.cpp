@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
     int loop_count = 1;
     while(loop_waitms(SAMPLE_RATE_MS, node) && keep_running) {
         double voltage = 0.0;
-    std::ostringstream power_ss, torque_ss, velocity_ss;
+        std::ostringstream power_ss, torque_ss, velocity_ss;
             power_ss << std::fixed << std::setprecision(4);
             torque_ss << std::fixed << std::setprecision(4);
             velocity_ss << std::fixed << std::setprecision(4);
@@ -68,7 +68,6 @@ int main(int argc, char** argv) {
         csvFile << loop_count << ',';
         MotorDiagnosticsArray read_val = ipc_receive(diagnostics_subscriber).value_or(init_array);
         
-
         for (int i = 0; i < MOTOR_COUNT; i++) {
             voltage += read_val.motor_instance[i].voltage;
             power_ss << read_val.motor_instance[i].power << ',';

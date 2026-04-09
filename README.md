@@ -75,6 +75,6 @@ conf write
 2. Run the following from command line
 ```bash
 moteus_tool --target X --write-config moteus_config.txt 
-moteus_tool --target X --calibrate
+moteus_tool --target X --calibrate --cal-force-kv 380
 ```
 Calibration can be done with the belt drives attached.

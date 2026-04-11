@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
 
     // Execution loop
     std::cout << "starting motor loop\n";
-    // attempt to receive value, poll on loop
+    // attempt to receive value, will wait until events occur
     while (true) { 
         
         auto event = system_listener.blocking_wait_one();
@@ -137,8 +137,10 @@ int main(int argc, char** argv) {
                     // Send the sample off to any subscribers
                     iox2::send(std::move(sample_s)).value();
                 }
-            } else
+            } else {
                 std::cout << "execution error\n";
+            }
+                
         }
     }
 

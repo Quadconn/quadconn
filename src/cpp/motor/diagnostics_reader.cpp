@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
     std::string motor_power;
     std::string motor_torque;
     std::string motor_velocity;
+    std::string motor_position;
     for (int i = 1; i < (MOTOR_COUNT+1); i++) {
         motor_power += "Motor " + std::to_string(i) + " Power,";
         motor_torque += "Motor " + std::to_string(i) + " Torque,";
@@ -60,10 +61,12 @@ int main(int argc, char** argv) {
     int loop_count = 1;
     while(loop_waitms(SAMPLE_RATE_MS, node) && keep_running) {
         double voltage = 0.0;
-        std::ostringstream power_ss, torque_ss, velocity_ss;
+        std::ostringstream power_ss, torque_ss, velocity_ss,
+                           abs_position_ss, ;
             power_ss << std::fixed << std::setprecision(4);
             torque_ss << std::fixed << std::setprecision(4);
             velocity_ss << std::fixed << std::setprecision(4);
+            abs_position_ss << std::fixed << std::setprecision(4);
 
         csvFile << loop_count << ',';
         MotorDiagnosticsArray read_val = ipc_receive(diagnostics_subscriber).value_or(init_array);
@@ -73,6 +76,7 @@ int main(int argc, char** argv) {
             power_ss << read_val.motor_instance[i].power << ',';
             torque_ss << read_val.motor_instance[i].torque << ',';
             velocity_ss << read_val.motor_instance[i].velocity << ',';
+            abs_position_ss << read_val.motor_instance[i].abs_position << ',';
         }
         csvFile << power_ss.str() << torque_ss.str() << velocity_ss.str()
                 << (voltage/static_cast<double>(MOTOR_COUNT)) << '\n';

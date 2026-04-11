@@ -6,7 +6,7 @@
 #include "quad_control.hpp"
 #include "quad_ipc.hpp"
 #include "gamepad_data.hpp"
-
+#include "system_logic.hpp"
 
 int main() {
     /* START: NODE DECLARATION */
@@ -15,6 +15,8 @@ int main() {
         (make_service<BodyJointAngles>("BodyJointAngles", quadcontrol_node));
     auto controller_subscriber = make_subscriber<GamepadData>
         (make_service<GamepadData>("GamepadData", quadcontrol_node));
+    auto interface_notifier = make_notifier
+        (make_event("SystemLogic", quadcontrol_node));
     /* END: NODE DECLARATION */
 
     QuadControl quad;
@@ -40,6 +42,8 @@ int main() {
                   << command.height_rate << ")" << std::endl;
 
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
+        interface_notifier.notify_with_custom_event_id(iox2::EventId(
+                           iox2::bb::into<size_t>(SystemLogic::QuadControlDone))).value();
     }
 
     return 0;

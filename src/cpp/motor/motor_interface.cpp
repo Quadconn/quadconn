@@ -15,7 +15,6 @@
 #include "system_logic.hpp"
 #include "iox2/iceoryx2.hpp"
 
-#define UPDATE_RATE_MS 5
 
 int main(int argc, char** argv) {
     using namespace mjbots;
@@ -87,62 +86,62 @@ int main(int argc, char** argv) {
 
     // Execution loop
     std::cout << "starting motor loop\n";
-    // attempt to receive value on loop duration
-
-    while (loop_waitms(UPDATE_RATE_MS, motor_node)) { 
+    // attempt to receive value, poll on loop
+    while (true) { 
         
-        auto event = system_listener.try_wait_one();
+        auto event = system_listener.blocking_wait_one();
         // catch stop signal
         if (event.has_value() && event.value().has_value()) {
             if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
-                    std::cout << "stopping motor_controller process";
-                    break;
-            }
-        }
+                std::cout << "stopping motor_controller process";
+                break;
+            } else
+            if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::QuadControlDone) {
+                        // receiving values from JointAngles struct
+                target_val = ipc_receive(angle_subscriber).value_or(target_val);
 
-        
-
-        // receiving values from JointAngles struct
-        target_val = ipc_receive(angle_subscriber).value_or(target_val);
-
-        //  build the CAN frames using the latest targets 
-        //  grouped by buses
-        for (auto& group : bus_groups) {
-            // Build frames for just this specific bus
-            for (size_t i = 0; i < group.controllers.size(); ++i) {
-                                             // legs and joint_types are indexable by integer
-                double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
-                cmd.position = rad2turns(angle_cmd);
-                cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
-                // index vector like array (avoid push_back resizing)
-                group.frames[i] = group.controllers[i]->MakePosition(cmd);
-            }
-            // clear all data before writing replies
-            group.replies.clear();
-            group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
-        }
-        
-        // Loan default-constructed memory directly from the shared pool
-        auto sample_s_opt = diagnostic_publisher.loan();
-        if (sample_s_opt.has_value()) {
-            auto sample_s = std::move(sample_s_opt.value());
-
-            for (const auto& group : bus_groups) {
-                for (const auto& frame: group.replies) {
-                    auto result = moteus::Query::Parse(frame.data, frame.size);
-                    int target_idx = frame.source - 1; 
-                    
-                    if (target_idx >= 0 && target_idx < MOTOR_NUM) {
-                        motor_info::populate_diag(
-                            result, 
-                            sample_s.payload_mut().motor_instance[target_idx]);
+                //  build the CAN frames using the latest targets 
+                //  grouped by buses
+                for (auto& group : bus_groups) {
+                    // Build frames for just this specific bus
+                    for (size_t i = 0; i < group.controllers.size(); ++i) {
+                                                    // legs and joint_types are indexable by integer
+                        double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
+                        cmd.position = rad2turns(angle_cmd);
+                        cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+                        // index vector like array (avoid push_back resizing)
+                        group.frames[i] = group.controllers[i]->MakePosition(cmd);
                     }
+                    // clear all data before writing replies
+                    group.replies.clear();
+                    group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
                 }
-            }
-            // Send the sample off to any subscribers
-            iox2::send(std::move(sample_s)).value();
+                
+                // Loan default-constructed memory directly from the shared pool
+                auto sample_s_opt = diagnostic_publisher.loan();
+                if (sample_s_opt.has_value()) {
+                    auto sample_s = std::move(sample_s_opt.value());
+
+                    for (const auto& group : bus_groups) {
+                        for (const auto& frame: group.replies) {
+                            auto result = moteus::Query::Parse(frame.data, frame.size);
+                            int target_idx = frame.source - 1; 
+                            
+                            if (target_idx >= 0 && target_idx < MOTOR_NUM) {
+                                motor_info::populate_diag(
+                                    result, 
+                                    sample_s.payload_mut().motor_instance[target_idx]);
+                            }
+                        }
+                    }
+                    // Send the sample off to any subscribers
+                    iox2::send(std::move(sample_s)).value();
+                }
+            } else
+                std::cout << "execution error\n";
         }
     }
+
     // End safely,
     // Clear faults
     for (auto& group : bus_groups) {

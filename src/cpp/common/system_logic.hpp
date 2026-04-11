@@ -13,6 +13,7 @@ enum class SystemLogic : uint8_t {
     // control code 
     StartMotors = 4,
     KillMotors = 5,
+    QuadControlDone = 6,
     Unknown = 67
 };
 
@@ -38,6 +39,8 @@ constexpr auto from<size_t, SystemLogic>(const size_t value) noexcept -> SystemL
         return SystemLogic::StartMotors;
     case into<size_t>(SystemLogic::KillMotors):
         return SystemLogic::KillMotors;    
+    case into<size_t>(SystemLogic::QuadControlDone):
+        return SystemLogic::QuadControlDone;
     default:
         return SystemLogic::Unknown;
     }

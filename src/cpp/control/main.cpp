@@ -39,7 +39,7 @@ int main() {
                   << command.yaw_rate << ", "
                   << command.height_rate << ")" << std::endl;
 
-        ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step_gait();});
+        ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
     }
 
     return 0;

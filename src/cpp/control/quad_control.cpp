@@ -33,10 +33,34 @@ void QuadControl::set_command(const QuadCommand& command) {
     if ((config::z_clearance_min < z_clearance) && (z_clearance < config::z_clearance_max)) {
         _height += _command.height_rate;
     }
+
+    if (_command.is_toggle_mode && _mode == Mode::TROT) {
+        _mode = Mode::REST;
+    } else if (_command.is_toggle_mode && _mode == Mode::REST) {
+        _mode = Mode::TROT;
+    }
 }
 
 
-BodyJointAngles QuadControl::step_gait() {
+BodyJointAngles QuadControl::step() {
+
+    if (_mode == Mode::TROT) {
+        step_gait();
+
+    } else if (_mode == Mode::REST) {
+        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+            _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
+        }
+    }
+
+    _ticks++;
+    return body_inverse_kinematics(_foot_locations);
+}
+
+// Private Methods
+
+// Step gait sequence forward one time step
+void QuadControl::step_gait() {
 
     for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
         // Given the contact phase (swing or overlap) find the contact mode (swing or stance) for this leg
@@ -55,14 +79,8 @@ BodyJointAngles QuadControl::step_gait() {
             swing_next_foot_location(_foot_locations[i], swing_proportion, i);
         }
     }
-
-    _ticks++;
-
-
-    return body_inverse_kinematics(_foot_locations);
 }
 
-// Private Methods
 
 BodyJointAngles QuadControl::body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets) {
     BodyJointAngles angles;
@@ -106,7 +124,8 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     // ---- Looking at side of leg normal to tilted z-axis -------
     
     // Angle between tilted negative z-axis and the hip to foot vector
-    double theta = std::atan2(-target.x(), d_hip_foot_yz);
+    double theta = (leg_index == common::FL || leg_index == common::FR)?
+                   std::atan2(-target.x(), d_hip_foot_yz) : std::atan2(target.x(), d_hip_foot_yz);
 
     // Distance between hip and foot
     double d_hip_foot = std::sqrt(sq(d_hip_foot_yz) + sq(target.x()));
@@ -117,8 +136,10 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     cos_trident = std::clamp(cos_trident, -ACOS_CLAMP, ACOS_CLAMP);
     double trident = std::acos(cos_trident);
 
-    // Angle of link L1 wrt the tilted negative z-axis
-    double hip_pitch = theta + trident;
+    // Angle of link L1 wrt the tilted negative z-axis (+/- makes hip bend backward/forward)
+    // must be opposite sign of knee_pitch for valid solution 
+    double hip_pitch = (leg_index == common::FL || leg_index == common::FR)? 
+                       (theta + trident) : -(theta + trident);
 
     // Angle between links L1 and L2
     double cos_beta = (sq(config::L1) + sq(config::L2) - sq(d_hip_foot)) / 
@@ -127,7 +148,9 @@ LegJointAngles QuadControl::leg_inverse_kinematics(const Eigen::Vector3d& target
     double beta = std::acos(cos_beta);
 
     // Angle of link L2 wrt hip pitch (+/- makes knee bend forward/backward)
-    double knee_pitch = -(std::numbers::pi - beta);
+    // must be opposite sign of hip_pitch for valid solution 
+    double knee_pitch = (leg_index == common::FL || leg_index == common::FR)?
+                        -(std::numbers::pi - beta) : (std::numbers::pi - beta);
 
     LegJointAngles leg_joint_angles = LegJointAngles {.hip_roll   = hip_roll, 
                                                       .hip_pitch  = hip_pitch,
@@ -159,6 +182,7 @@ void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_in
     }
 }
 
+
 Eigen::Vector3d QuadControl::leg_forward_kinematics(const LegJointAngles& angles) {
     Eigen::Vector3d result;
     
@@ -185,7 +209,6 @@ void QuadControl::stance_next_foot_location(Eigen::Vector3d& foot_location) {
     Eigen::Vector3d inv_vel_xy(-_command.horizontal_velocity_x, 
                                -_command.horizontal_velocity_y, 
                                (_height - foot_location.z()) / config::z_time_constant);
-
     // Get inverse position delta for this time step
     Eigen::Vector3d inv_pos_delta_xy = inv_vel_xy * common::DT;
 

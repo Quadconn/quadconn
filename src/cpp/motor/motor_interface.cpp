@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
         moteus::Controller::Options opts{};
         opts.id = def.can_id;
         opts.transport = def.bus;
-
+        opts.query_format.power = moteus::kFloat;
+        
         // populate BusGroup directly using key-value pairs
         // if already exists, then retrieve reference. Otherwise, create
         // another key-value pair
@@ -79,6 +80,8 @@ int main(int argc, char** argv) {
 
     // Prepare batch of commands
     BodyJointAngles target_val{};
+    //     
+
     // handles moteus sending, query, and receiving data structures
     moteus::PositionMode::Command cmd;
 

@@ -17,12 +17,18 @@ class QuadControl {
         // Set the stored command for use in gait calculations
         void set_command(const QuadCommand& command);
 
-        // Advance the gait sequence for this time step
-        BodyJointAngles step_gait();
-
+        // Advance the robot control for this time step
+        BodyJointAngles step();
 
 
     private:
+
+        enum class Mode{
+            REST,
+            TROT,
+        };
+
+
         QuadCommand _command;
         std::array<Eigen::Vector3d, quad::common::LEG_COUNT> _foot_locations;
         int _ticks = 0;
@@ -31,6 +37,10 @@ class QuadControl {
         // (0) -> equal to body
         // (-) -> below body
         double _height = -(quad::config::L1 + (quad::config::L2 / 2));
+        Mode _mode = Mode::REST;
+
+
+        void step_gait();
 
         BodyJointAngles body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets);
 

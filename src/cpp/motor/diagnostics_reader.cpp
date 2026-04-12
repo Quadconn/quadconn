@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
         motor_power += "Motor " + std::to_string(i) + " Power,";
         motor_torque += "Motor " + std::to_string(i) + " Torque,";
         motor_velocity += "Motor " + std::to_string(i) + " Velocity,";
+        motor_position += "Motor " + std::to_string(i) + " Position,";
     }
     csvFile << "Timestamp," 
             << motor_power << motor_torque << motor_velocity 
@@ -62,7 +63,7 @@ int main(int argc, char** argv) {
     while(loop_waitms(SAMPLE_RATE_MS, node) && keep_running) {
         double voltage = 0.0;
         std::ostringstream power_ss, torque_ss, velocity_ss,
-                           abs_position_ss, ;
+                           abs_position_ss;
             power_ss << std::fixed << std::setprecision(4);
             torque_ss << std::fixed << std::setprecision(4);
             velocity_ss << std::fixed << std::setprecision(4);

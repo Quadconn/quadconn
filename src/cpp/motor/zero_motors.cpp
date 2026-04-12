@@ -78,7 +78,8 @@ int main(int argc, char** argv) {
             // d cfg-set-output: updates the 'motor_position.sources.0.offset' config
             std::string sync_cmd = "d cfg-set-output " + std::to_string(zero_positions[idx]);
             try {
-                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << " turns...\n";
+                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx]*(GEAR_RATIO/M_PI) 
+                          << " radians...\n";
                 
                 // Execute the sequence
                 group.controllers[i]->DiagnosticCommand(exact_cmd);    // Set runtime position

@@ -1,13 +1,13 @@
 #pragma once
 
 #include <iostream>
-#include <limits>
 #include "quad_common.hpp"
 
+// TODO DR: Figure out why quite_NaN breaks python simulation. For now removing.
 struct LegJointAngles {
-    double hip_roll = std::numeric_limits<double>::quiet_NaN();
-    double hip_pitch = std::numeric_limits<double>::quiet_NaN();
-    double knee_pitch = std::numeric_limits<double>::quiet_NaN();
+    double hip_roll;
+    double hip_pitch;
+    double knee_pitch;
     static constexpr const char* IOX2_TYPE_NAME = "LegJointAngles";
 };
 

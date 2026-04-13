@@ -43,18 +43,23 @@ void QuadControl::set_command(const QuadCommand& command) {
 
 
 BodyJointAngles QuadControl::step() {
+    BodyJointAngles angles;
 
-    if (_mode == Mode::TROT) {
+    if (_mode == Mode::STARTUP) {
+        angles = quad::config::START_ANGLES;
+    } else if (_mode == Mode::TROT) {
         step_gait();
+        angles = body_inverse_kinematics(_foot_locations);
 
     } else if (_mode == Mode::REST) {
         for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
             _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
         }
+        angles = body_inverse_kinematics(_foot_locations);
     }
 
     _ticks++;
-    return body_inverse_kinematics(_foot_locations);
+    return angles;
 }
 
 // Private Methods

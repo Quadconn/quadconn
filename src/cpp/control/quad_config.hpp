@@ -4,7 +4,14 @@
 
 #include <Eigen/Dense>
 
+#include "joint_angles.hpp"
 #include "quad_common.hpp"
+
+
+// Take input turns and convert to scaled output radians
+static constexpr double input_to_output_rad(double turns) {
+    return turns * (2.0 * std::numbers::pi / quad::common::INPUT_TO_OUTPUT_SCALE);
+}
 
 // NOTE: All values follow SI units
 //  - distance/length -> meters
@@ -93,4 +100,12 @@ namespace quad::config {
         Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
         Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
+
+    inline constexpr BodyJointAngles START_ANGLES = {{
+    //                      hip_roll,                    hip_pitch,                  knee_pitch
+        {input_to_output_rad(2.6225), input_to_output_rad( 2.3560), input_to_output_rad(-4.1744)}, // FL
+        {input_to_output_rad(2.6104), input_to_output_rad(-2.1295), input_to_output_rad( 4.1919)}, // FR
+        {input_to_output_rad(2.6510), input_to_output_rad(-2.3023), input_to_output_rad( 4.1599)}, // BL
+        {input_to_output_rad(2.4992), input_to_output_rad( 2.3457), input_to_output_rad(-4.1717)}  // BR
+    }};
 };

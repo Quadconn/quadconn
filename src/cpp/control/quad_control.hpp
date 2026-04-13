@@ -24,6 +24,7 @@ class QuadControl {
     private:
 
         enum class Mode{
+            STARTUP,
             REST,
             TROT,
         };
@@ -37,7 +38,7 @@ class QuadControl {
         // (0) -> equal to body
         // (-) -> below body
         double _height = -(quad::config::L1 + (quad::config::L2 / 2));
-        Mode _mode = Mode::REST;
+        Mode _mode = Mode::STARTUP;
 
 
         void step_gait();

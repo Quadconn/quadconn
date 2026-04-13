@@ -13,4 +13,7 @@ namespace quad::common {
     inline constexpr int FR = 1; // Front right
     inline constexpr int BL = 2; // Back left
     inline constexpr int BR = 3; // Back right
+    
+    // Input to output scaling factor
+    inline constexpr double INPUT_TO_OUTPUT_SCALE = 9.0;
 };

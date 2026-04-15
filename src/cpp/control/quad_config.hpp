@@ -13,9 +13,15 @@ static constexpr double input_to_output_rad(double turns) {
     return turns * (2.0 * std::numbers::pi / quad::common::INPUT_TO_OUTPUT_SCALE);
 }
 
+// Turn velocity to angular velocity
+static constexpr double turnv_to_angv(double turn_v) {
+    return turn_v * (2.0 * std::numbers::pi);
+}
+
 // NOTE: All values follow SI units
 //  - distance/length -> meters
 //  - time -> seconds
+//  - angular vel -> rad/s
 
 namespace quad::config {
     // Swing proportional gains
@@ -31,6 +37,10 @@ namespace quad::config {
 
     // Total tick duration of a full gait (swings and overlaps)
     inline constexpr int total_gait_ticks = (2 * overlap_ticks) + (2 * swing_ticks);
+
+    // Joint angular velocities
+    inline constexpr double startup_joint_velocity = turnv_to_angv(0.1);
+    inline constexpr double startup_joint_step = startup_joint_velocity * quad::common::DT;
 
     // Contact modes
     inline constexpr int SWING  = 0;
@@ -101,7 +111,7 @@ namespace quad::config {
         Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
 
-    inline constexpr BodyJointAngles START_ANGLES = {{
+    inline constexpr BodyJointAngles STARTUP_ANGLES = {{
     //                      hip_roll,                    hip_pitch,                  knee_pitch
         {input_to_output_rad(2.6225), input_to_output_rad( 2.3560), input_to_output_rad(-4.1744)}, // FL
         {input_to_output_rad(2.6104), input_to_output_rad(-2.1295), input_to_output_rad( 4.1919)}, // FR

@@ -34,39 +34,82 @@ void QuadControl::set_command(const QuadCommand& command) {
         _height += _command.height_rate;
     }
 
-    if (_command.is_toggle_mode && _mode == Mode::TROT) {
-        _mode = Mode::REST;
-    } else if (_command.is_toggle_mode && _mode == Mode::REST) {
-        _mode = Mode::TROT;
-    }
 }
 
 
 BodyJointAngles QuadControl::step() {
-    BodyJointAngles angles;
+    // TODO DR: See if its better to do mode changes here (either also or instead of above, ie could set and clear a flag)
 
-    if (_mode == Mode::STARTUP) {
-        angles = quad::config::START_ANGLES;
-    } else if (_mode == Mode::TROT) {
-        step_gait();
-        angles = body_inverse_kinematics(_foot_locations);
+    Mode next_mode;
 
-    } else if (_mode == Mode::REST) {
-        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
-            _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
-        }
-        angles = body_inverse_kinematics(_foot_locations);
+    switch (_mode) {
+        case Mode::STARTUP:
+            next_mode = step_startup();
+            break;
+
+        case Mode::REST:
+            next_mode = step_rest();
+            break;
+
+        case Mode::TROT:
+            next_mode = step_trot();
+            break;
+
+        default:
+            next_mode = _mode;
+            break;
     }
 
+    _mode = next_mode;
     _ticks++;
-    return angles;
+    return _joint_angles;
 }
 
 // Private Methods
 
-// Step gait sequence forward one time step
-void QuadControl::step_gait() {
+// Step startup mode forward one time step
+QuadControl::Mode QuadControl::step_startup() {
+    // Calculate joint offsets for this time step, +/- towards default stance + default height
 
+    // increment _joint_angles with rotation step
+
+    // Hip roll handling
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        double step;
+        // Find direction towards goal
+        if (_joint_angles.body_joint_angles[i].hip_roll < _startup_goal.body_joint_angles[i].hip_roll) {
+            step = config::startup_joint_step;
+        } else {
+            step = -config::startup_joint_step;
+        }
+
+        // Prevent overshoot
+        if (abs(_startup_goal.body_joint_angles[i].hip_roll - _joint_angles.body_joint_angles[i].hip_roll) <= abs(step)) {
+            _joint_angles.body_joint_angles[i].hip_roll = _startup_goal.body_joint_angles[i].hip_roll;
+        } else {
+            _joint_angles.body_joint_angles[i].hip_roll += step;
+        }
+    } 
+    // Hip and knee pitch handling
+
+    return Mode::STARTUP;
+}
+
+// Step rest mode forward one time step
+QuadControl::Mode QuadControl::step_rest() {
+    // step logic
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
+    }
+    _joint_angles = body_inverse_kinematics(_foot_locations);
+
+    // check for mode change
+    return (_command.is_toggle_mode)? Mode::TROT : Mode::REST;
+}
+
+// Step gait sequence forward one time step
+QuadControl::Mode QuadControl::step_trot() {
+    // step logic
     for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
         // Given the contact phase (swing or overlap) find the contact mode (swing or stance) for this leg
         int contact_mode = config::contact_phases[contact_phase()][i];
@@ -84,6 +127,10 @@ void QuadControl::step_gait() {
             swing_next_foot_location(_foot_locations[i], swing_proportion, i);
         }
     }
+    _joint_angles = body_inverse_kinematics(_foot_locations);
+
+    // check for mode change
+    return (_command.is_toggle_mode)? Mode::REST : Mode::TROT;
 }
 
 

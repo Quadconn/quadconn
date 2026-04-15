@@ -58,6 +58,10 @@ class QuadControl {
 
         Mode step_trot();
 
+        bool hip_rolls_equal(const BodyJointAngles& a, const BodyJointAngles& b);
+
+        bool hip_knee_pitches_equal(const BodyJointAngles& a, const BodyJointAngles& b);
+
         BodyJointAngles body_inverse_kinematics(const std::array<Eigen::Vector3d, quad::common::LEG_COUNT>& targets);
 
         LegJointAngles leg_inverse_kinematics(const Eigen::Vector3d& target, std::size_t leg_index);

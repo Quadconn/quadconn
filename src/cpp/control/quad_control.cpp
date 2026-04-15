@@ -74,26 +74,83 @@ QuadControl::Mode QuadControl::step_startup() {
     // increment _joint_angles with rotation step
 
     // Hip roll handling
-    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
-        double step;
-        // Find direction towards goal
-        if (_joint_angles.body_joint_angles[i].hip_roll < _startup_goal.body_joint_angles[i].hip_roll) {
-            step = config::startup_joint_step;
-        } else {
-            step = -config::startup_joint_step;
-        }
+    if (!hip_rolls_equal(_joint_angles, _startup_goal)) {
+        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+            double step;
+            // Find direction towards goal
+            if (_joint_angles.body_joint_angles[i].hip_roll < _startup_goal.body_joint_angles[i].hip_roll) {
+                step = config::startup_joint_step;
+            } else {
+                step = -config::startup_joint_step;
+            }
 
-        // Prevent overshoot
-        if (abs(_startup_goal.body_joint_angles[i].hip_roll - _joint_angles.body_joint_angles[i].hip_roll) <= abs(step)) {
-            _joint_angles.body_joint_angles[i].hip_roll = _startup_goal.body_joint_angles[i].hip_roll;
-        } else {
-            _joint_angles.body_joint_angles[i].hip_roll += step;
-        }
-    } 
+            // Prevent overshoot
+            if (abs(_startup_goal.body_joint_angles[i].hip_roll - _joint_angles.body_joint_angles[i].hip_roll) <= abs(step)) {
+                _joint_angles.body_joint_angles[i].hip_roll = _startup_goal.body_joint_angles[i].hip_roll;
+            } else {
+                _joint_angles.body_joint_angles[i].hip_roll += step;
+            }
+        } 
+    } else {
+        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+            double step;
+            // Find direction towards goal
+            if (_joint_angles.body_joint_angles[i].hip_pitch < _startup_goal.body_joint_angles[i].hip_pitch) {
+                step = config::startup_joint_step;
+            } else {
+                step = -config::startup_joint_step;
+            }
+
+            // Prevent overshoot
+            if (abs(_startup_goal.body_joint_angles[i].hip_pitch - _joint_angles.body_joint_angles[i].hip_pitch) <= abs(step)) {
+                _joint_angles.body_joint_angles[i].hip_pitch = _startup_goal.body_joint_angles[i].hip_pitch;
+            } else {
+                _joint_angles.body_joint_angles[i].hip_pitch += step;
+            }
+
+            // Find direction towards goal
+            if (_joint_angles.body_joint_angles[i].knee_pitch < _startup_goal.body_joint_angles[i].knee_pitch) {
+                step = config::startup_joint_step;
+            } else {
+                step = -config::startup_joint_step;
+            }
+
+            // Prevent overshoot
+            if (abs(_startup_goal.body_joint_angles[i].knee_pitch - _joint_angles.body_joint_angles[i].knee_pitch) <= abs(step)) {
+                _joint_angles.body_joint_angles[i].knee_pitch = _startup_goal.body_joint_angles[i].knee_pitch;
+            } else {
+                _joint_angles.body_joint_angles[i].knee_pitch += step;
+            }
+        } 
+    }
+
     // Hip and knee pitch handling
 
-    return Mode::STARTUP;
+    return (hip_knee_pitches_equal(_joint_angles, _startup_goal))? Mode::REST: Mode::STARTUP;
 }
+
+
+bool QuadControl::hip_rolls_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        if (a.body_joint_angles[i].hip_roll != b.body_joint_angles[i].hip_roll) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool QuadControl::hip_knee_pitches_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        if (a.body_joint_angles[i].hip_pitch != b.body_joint_angles[i].hip_pitch) {
+            return false;
+        }
+        if (a.body_joint_angles[i].knee_pitch != b.body_joint_angles[i].knee_pitch) {
+            return false;
+        }
+    }
+    return true;
+}
+
 
 // Step rest mode forward one time step
 QuadControl::Mode QuadControl::step_rest() {

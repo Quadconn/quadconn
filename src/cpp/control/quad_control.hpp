@@ -37,6 +37,7 @@ class QuadControl {
             STARTUP,
             REST,
             TROT,
+            SHUTDOWN,
         };
 
 
@@ -57,6 +58,8 @@ class QuadControl {
         Mode step_rest();
 
         Mode step_trot();
+
+        Mode step_shutdown();
 
         bool hip_rolls_equal(const BodyJointAngles& a, const BodyJointAngles& b);
 

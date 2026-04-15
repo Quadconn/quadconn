@@ -33,12 +33,6 @@ int main() {
 
         quad.set_command(command);
 
-        std::cout << "Sending (Vx, Vy, Vyaw, Vheight): (" 
-                  << command.horizontal_velocity_x << ", "
-                  << command.horizontal_velocity_y << ", "
-                  << command.yaw_rate << ", "
-                  << command.height_rate << ")" << std::endl;
-
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
     }
 

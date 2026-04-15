@@ -42,6 +42,12 @@ namespace quad::config {
     inline constexpr double startup_joint_velocity = turnv_to_angv(0.1);
     inline constexpr double startup_joint_step = startup_joint_velocity * quad::common::DT;
 
+    // Commanded config values
+    static inline const double MAX_HORIZONTAL_VELOCITY_X = 0.3;
+    static inline const double MAX_HORIZONTAL_VELOCITY_Y = 0.2;
+    static inline const double MAX_YAW_RATE = 0.3;
+    static inline const double MAX_HEIGHT_RATE = 0.1;
+
     // Contact modes
     inline constexpr int SWING  = 0;
     inline constexpr int STANCE = 1;

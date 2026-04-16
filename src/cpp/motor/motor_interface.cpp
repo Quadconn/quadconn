@@ -67,6 +67,13 @@ int main(int argc, char** argv) {
         bus_groups.push_back(std::move(group));
     }
 
+    while (true) {
+        auto event = system_listener.blocking_wait_one();
+        if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
+            std::cout << "starting motor_controller process";
+            break;
+        }
+    }
 
     // Clear faults
     for (auto& group : bus_groups) {

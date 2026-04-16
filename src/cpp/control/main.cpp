@@ -23,6 +23,9 @@ int main() {
     BodyJointAngles angles;
     QuadCommand command = {0.0};
 
+    interface_notifier.notify_with_custom_event_id(iox2::EventId(
+                    iox2::bb::into<size_t>(SystemLogic::StartMotors))).value();
+
     while (loop_waitms(quad::common::DT_MILLI, quadcontrol_node)) {
         
         // receiving joystick data

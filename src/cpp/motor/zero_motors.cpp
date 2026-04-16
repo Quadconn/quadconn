@@ -9,17 +9,16 @@
 #include "moteus.h"
 #include "motor_diagnostics.hpp"
 #include "motor_config.hpp"
-
+#include "quad_common.hpp"
 
 int main(int argc, char** argv) {
     using namespace mjbots;
 
     // Define initial positions, indexed as N+1 as nodes
     std::array<double, MOTOR_COUNT> zero_positions = 
-    {rad2turns(-2.302),               rad2turns(4.192),      rad2turns(2.356),
-     rad2turns(-4.174),               rad2turns(2.610),      rad2turns(2.651),
-     rad2turns(2.500),                rad2turns(2.623),      rad2turns(2.346),
-     rad2turns(-4.172),               rad2turns(4.160),      rad2turns(-2.129)};
+    {quad::common::BL_HIP_PITCH_0, quad::common::FR_KNEE_0, 2.3222, -4.1366,
+     0, 2.6511, 0, 2.6353,
+     0, 0, 4.1771, 0};
 
     // Initialize Controllers
     std::cout << "initializing motors\n";

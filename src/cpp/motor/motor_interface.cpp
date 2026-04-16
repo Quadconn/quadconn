@@ -136,9 +136,19 @@ int main(int argc, char** argv) {
                     }
                     // Send the sample off to any subscribers
                     iox2::send(std::move(sample_s)).value();
+                    
                 }
             } else {
-                std::cout << "execution error\n";
+                for (auto& group : bus_groups) {
+                    for (size_t i = 0; i < group.controllers.size(); ++i) {
+                        cmd.position = std::numeric_limits<double>::quiet_NaN();
+                        cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+                        group.frames[i] = group.controllers[i]->MakePosition(cmd);
+                    }
+                    // clear all data before writing replies
+                    group.replies.clear();
+                    group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+                }
             }
                 
         }

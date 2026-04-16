@@ -81,7 +81,7 @@ int main() {
                                     std::memcpy(sample.payload_mut().points, raw_pairs.data(), count * sizeof(RawPair));
                                     
                                     // 2. Pass the sample into the Publisher's send method
-                                    publisher.send(std::move(sample)).value();
+                                    iox2::send(std::move(sample)).value();
                                     }
                                 }
                                 raw_pairs.clear();

@@ -16,9 +16,11 @@ int main(int argc, char** argv) {
 
     // Define initial positions, indexed as N+1 as nodes
     std::array<double, MOTOR_COUNT> zero_positions = 
-    {quad::common::BL_HIP_PITCH_0, quad::common::FR_KNEE_0, 2.3222, -4.1366,
-     0, 2.6511, 0, 2.6353,
-     0, 0, 4.1771, 0};
+    {quad::common::BL_HIP_PITCH_0, quad::common::FR_KNEE_0, quad::common::FL_HIP_ROLL_0, 
+     quad::common::FL_KNEE_0, quad::common::FR_HIP_ROLL_0, quad::common::BL_HIP_ROLL_0,
+     quad::common::BL_HIP_ROLL_0, quad::common::FL_HIP_ROLL_0, quad::common::BR_HIP_PITCH_0,
+     quad::common::BR_KNEE_0, quad::common::BL_KNEE_0, quad::common::FR_HIP_PITCH_0
+    };
 
     // Initialize Controllers
     std::cout << "initializing motors\n";

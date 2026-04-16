@@ -117,10 +117,10 @@ namespace quad::config {
     };
 
     inline constexpr BodyJointAngles STARTUP_ANGLES = {{
-    //                      hip_roll,                    hip_pitch,                  knee_pitch
-        {input_to_output_rad(2.6225), input_to_output_rad( 2.3560), input_to_output_rad(-4.1744)}, // FL
-        {input_to_output_rad(2.6104), input_to_output_rad(-2.1295), input_to_output_rad( 4.1919)}, // FR
-        {input_to_output_rad(2.6510), input_to_output_rad(-2.3023), input_to_output_rad( 4.1599)}, // BL
-        {input_to_output_rad(2.4992), input_to_output_rad( 2.3457), input_to_output_rad(-4.1717)}  // BR
+    //                               hip_roll,                                   hip_pitch,                                   knee_pitch
+        {input_to_output_rad(common::FL_HIP_ROLL_0), input_to_output_rad(common::FL_HIP_PITCH_0), input_to_output_rad(common::FL_KNEE_0)}, // FL
+        {input_to_output_rad(common::FR_HIP_ROLL_0), input_to_output_rad(common::FR_HIP_PITCH_0), input_to_output_rad(common::FR_KNEE_0)}, // FR
+        {input_to_output_rad(common::BL_HIP_ROLL_0), input_to_output_rad(common::BL_HIP_PITCH_0), input_to_output_rad(common::BL_KNEE_0)}, // BL
+        {input_to_output_rad(common::BR_HIP_ROLL_0), input_to_output_rad(common::BR_HIP_PITCH_0), input_to_output_rad(common::BR_KNEE_0)}  // BR
     }};
 };

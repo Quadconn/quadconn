@@ -40,7 +40,6 @@ void QuadControl::set_command(const QuadCommand& command) {
 
 
 BodyJointAngles QuadControl::step() {
-    // TODO DR: See if its better to do mode changes here (either also or instead of above, ie could set and clear a flag)
 
     Mode next_mode;
 
@@ -136,46 +135,6 @@ QuadControl::Mode QuadControl::step_startup() {
 }
 
 
-// Just go down to zero height
-QuadControl::Mode QuadControl::step_shutdown() {
-    static const double height_step = config::MAX_HEIGHT_RATE * common::DT;
-
-    double z_clearance = abs(_height + height_step);
-    if ((0.04 < z_clearance)) {
-        _height += height_step;
-
-        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
-            _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
-        }
-        _joint_angles = body_inverse_kinematics(_foot_locations);
-    }
-
-    return Mode::SHUTDOWN;
-}
-
-
-bool QuadControl::hip_rolls_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
-    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
-        if (a.body_joint_angles[i].hip_roll != b.body_joint_angles[i].hip_roll) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool QuadControl::hip_knee_pitches_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
-    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
-        if (a.body_joint_angles[i].hip_pitch != b.body_joint_angles[i].hip_pitch) {
-            return false;
-        }
-        if (a.body_joint_angles[i].knee_pitch != b.body_joint_angles[i].knee_pitch) {
-            return false;
-        }
-    }
-    return true;
-}
-
-
 // Step rest mode forward one time step
 QuadControl::Mode QuadControl::step_rest() {
     Mode next_mode;
@@ -228,6 +187,46 @@ QuadControl::Mode QuadControl::step_trot() {
         next_mode = Mode::TROT;
     }
     return next_mode;
+}
+
+
+// Just go down to zero height
+QuadControl::Mode QuadControl::step_shutdown() {
+    static const double height_step = config::MAX_HEIGHT_RATE * common::DT;
+
+    double z_clearance = abs(_height + height_step);
+    if ((0.04 < z_clearance)) {
+        _height += height_step;
+
+        for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+            _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
+        }
+        _joint_angles = body_inverse_kinematics(_foot_locations);
+    }
+
+    return Mode::SHUTDOWN;
+}
+
+
+bool QuadControl::hip_rolls_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        if (a.body_joint_angles[i].hip_roll != b.body_joint_angles[i].hip_roll) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool QuadControl::hip_knee_pitches_equal(const BodyJointAngles& a, const BodyJointAngles& b) {
+    for (std::size_t i = 0; i < common::LEG_COUNT; i++) {
+        if (a.body_joint_angles[i].hip_pitch != b.body_joint_angles[i].hip_pitch) {
+            return false;
+        }
+        if (a.body_joint_angles[i].knee_pitch != b.body_joint_angles[i].knee_pitch) {
+            return false;
+        }
+    }
+    return true;
 }
 
 

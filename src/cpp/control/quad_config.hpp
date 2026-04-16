@@ -29,8 +29,8 @@ namespace quad::config {
     inline constexpr double beta            = 0.5; // Rotational
 
     // Gait timings
-    inline constexpr double overlap_time    = 0.10; // Duration where all feet on ground
-    inline constexpr double swing_time      = 0.15; // Duration when only two diagonal feet on ground
+    inline constexpr double overlap_time    = 0.08; // Duration where all feet on ground
+    inline constexpr double swing_time      = 0.10; // Duration when only two diagonal feet on ground
     inline constexpr int overlap_ticks      = overlap_time / quad::common::DT;
     inline constexpr int swing_ticks        = swing_time / quad::common::DT;
     inline constexpr int stance_ticks       = (2 * overlap_ticks) + swing_ticks;
@@ -42,9 +42,25 @@ namespace quad::config {
     inline constexpr double startup_joint_velocity = turnv_to_angv(0.1);
     inline constexpr double startup_joint_step = startup_joint_velocity * quad::common::DT;
 
+    // Kinematic Lengths
+    inline constexpr double ABDUCTION_OFFSET = 0.10300;
+    inline constexpr double L1               = 0.19625;
+    inline constexpr double L2               = 0.20356;
+    inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
+    inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
+
+    // Time step to clamp height correction speed
+    inline constexpr double z_time_constant = 0.02;
+    // z direction delta of swing height
+    inline constexpr double z_delta_swing_height  = 0.04;
+    // Max clearance between body and foot in z direction
+    inline constexpr double z_clearance_max = L1 + L2;
+    // Min clearance between body and foot in z direction
+    inline constexpr double z_clearance_min = L1;
+
     // Commanded config values
-    static inline const double MAX_HORIZONTAL_VELOCITY_X = 0.3;
-    static inline const double MAX_HORIZONTAL_VELOCITY_Y = 0.2;
+    static inline const double MAX_HORIZONTAL_VELOCITY_X = 0.15;
+    static inline const double MAX_HORIZONTAL_VELOCITY_Y = 0.10;
     static inline const double MAX_YAW_RATE = 0.3;
     static inline const double MAX_HEIGHT_RATE = 0.1;
 
@@ -75,23 +91,6 @@ namespace quad::config {
         // Read as {FL, FR,
         //         {BL, BR}
     }};
-
-    // Kinematic Lengths
-    inline constexpr double ABDUCTION_OFFSET = 0.10300;
-    inline constexpr double L1               = 0.19625;
-    inline constexpr double L2               = 0.20356;
-    inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
-    inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
-
-    // Time step to clamp height correction speed
-    inline constexpr double z_time_constant = 0.02;
-    // Max clearance between body and foot in z direction
-    inline constexpr double z_clearance_max = L1 + L2;
-    // Min clearance between body and foot in z direction
-    inline constexpr double z_clearance_min = L1;
-    // z direction delta of swing height
-    inline constexpr double z_delta_swing_height  = 0.07;
-
 
     // Abduction offsets per leg
     inline constexpr std::array<double, quad::common::LEG_COUNT> ABDUCTION_OFFSETS = {

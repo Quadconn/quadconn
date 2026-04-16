@@ -21,3 +21,9 @@ __pycache__
 
 # External installs
 install
+
+# YOLO
+yolov8n.pt
+
+# Recordings
+recordings

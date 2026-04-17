@@ -16,9 +16,9 @@ int main(int argc, char** argv) {
 
     // Define initial positions, indexed as N+1 as nodes
     std::array<double, MOTOR_COUNT> zero_positions = 
-    {quad::common::BL_HIP_PITCH_0, quad::common::FR_KNEE_0, quad::common::FL_HIP_ROLL_0, 
+    {quad::common::BL_HIP_PITCH_0, quad::common::FR_KNEE_0, quad::common::FL_HIP_PITCH_0, 
      quad::common::FL_KNEE_0, quad::common::FR_HIP_ROLL_0, quad::common::BL_HIP_ROLL_0,
-     quad::common::BL_HIP_ROLL_0, quad::common::FL_HIP_ROLL_0, quad::common::BR_HIP_PITCH_0,
+     quad::common::BR_HIP_ROLL_0, quad::common::FL_HIP_ROLL_0, quad::common::BR_HIP_PITCH_0,
      quad::common::BR_KNEE_0, quad::common::BL_KNEE_0, quad::common::FR_HIP_PITCH_0
     };
 
@@ -79,8 +79,7 @@ int main(int argc, char** argv) {
             // d cfg-set-output: updates the 'motor_position.sources.0.offset' config
             std::string sync_cmd = "d cfg-set-output " + std::to_string(zero_positions[idx]);
             try {
-                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx]*(GEAR_RATIO/M_PI) 
-                          << " radians...\n";
+                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << "turns\n";
                 
                 // Execute the sequence
                 group.controllers[i]->DiagnosticCommand(exact_cmd);    // Set runtime position

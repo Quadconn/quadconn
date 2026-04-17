@@ -67,10 +67,11 @@ int main(int argc, char** argv) {
         bus_groups.push_back(std::move(group));
     }
 
+    std::cout << "waiting for control code\n";
     while (true) {
         auto event = system_listener.blocking_wait_one();
         if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
-            std::cout << "starting motor_controller process";
+            std::cout << "starting motor_controller process\n";
             break;
         }
     }

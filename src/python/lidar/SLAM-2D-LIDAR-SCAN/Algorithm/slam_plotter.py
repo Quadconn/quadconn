@@ -10,8 +10,57 @@ import matplotlib.pyplot as plt
 import json
 import numpy as np
 import matplotlib
+import iceoryx2 as iox2
+import quad_ipc
+from system_logic import SystemLogic, to_event_id
+import time
+from gamepad_data import GamepadData
+
 matplotlib.use("QtAgg")
 
+
+pollHz = 100
+pollCycle = 1.0 / pollHz
+vel_stick = 20.0 # Feet per minute
+stick_deadzone = 0.05
+class GamepadSubscriber():
+    def __init__(self):
+        self.data = None
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+    
+    def _loop(self):
+        node = quad_ipc.make_node("gamepad_sub")
+        service = (
+            node.service_builder(iox2.ServiceName.new("GamepadData"))
+            .publish_subscribe(GamepadData)
+            .open_or_create()
+        )
+        sub = service.subscriber_builder().create()
+        while True:
+            tStart = time.monotonic()
+            sample = sub.receive()
+            if sample is not None:
+                self.data = sample.payload()
+            
+            elapsed = time.monotonic() - tStart
+            sleep_time = pollCycle - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+    def get_velocity(self) -> dict:
+        data = self.data
+        if data is None:
+            return {"vel_x": vel_x, "vel_y": vel_y}
+        if abs(data.lx) > stick_deadzone:
+            vel_x = data.lx * vel_stick
+        else:
+            vel_x = 0
+        
+        if abs(data.ly) > stick_deadzone:
+            vel_y = data.ly * vel_stick
+        else:
+            vel_y = 0
+        return {"vel_x": vel_x, "vel_y": vel_y}
 # ==============================================================================
 #  All units are FEET throughout (distances, map sizes, poses, grid size).
 #
@@ -214,6 +263,7 @@ class Particle:
 # ==============================================================================
 
 def processSensorData(pf, source, use_udp=False, human_is=False):
+    gamepad = GamepadSubscriber()
     """
     source:
       - use_udp=False  ->  source is a dict  {timestamp: scan_entry, ...}
@@ -328,7 +378,7 @@ def processSensorData(pf, source, use_udp=False, human_is=False):
                         potential_human = np.vstack(
                             [potential_human, [x_robot, y_robot]])
                     human_markers += 1
-
+        
         ax.set_title(f"Live Map  —  Frame {count}")
         ax.set_xlabel("X (ft)")
         ax.set_ylabel("Y (ft)")
@@ -394,6 +444,7 @@ def main():
     missMatchProbAtCoarse = 0.15
     coarseFactor = 5
 
+    
     # ------------------------------------------------------------------
     # Choose mode:
     #   use_udp = True   ->  receive live scans from sf45_collector over UDP

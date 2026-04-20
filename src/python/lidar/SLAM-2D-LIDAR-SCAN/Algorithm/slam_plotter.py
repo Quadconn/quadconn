@@ -23,6 +23,7 @@ pollHz = 100
 pollCycle = 1.0 / pollHz
 vel_stick = 20.0 # Feet per minute
 stick_deadzone = 0.05
+
 class GamepadSubscriber():
     def __init__(self):
         self.data = None
@@ -48,19 +49,22 @@ class GamepadSubscriber():
             if sleep_time > 0:
                 time.sleep(sleep_time)
     def get_velocity(self) -> dict:
+        # lx and ly are normalized to roughly [-1, 1]
+        # converts feet/min to feet/sec 
         data = self.data
         if data is None:
-            return {"vel_x": vel_x, "vel_y": vel_y}
-        if abs(data.lx) > stick_deadzone:
-            vel_x = data.lx * vel_stick
-        else:
-            vel_x = 0
+            return {"vx_body": 0.0, "vy_body": 0.0}
         
-        if abs(data.ly) > stick_deadzone:
-            vel_y = data.ly * vel_stick
+        if abs(data.lx) > stick_deadzone:
+            vx = data.lx * vel_stick / 60.0
         else:
-            vel_y = 0
-        return {"vel_x": vel_x, "vel_y": vel_y}
+            vx = 0.0 
+        if abs(data.ly) > stick_deadzone:
+            vy = data.ly * vel_stick / 60.0
+        else:
+            vy = 0.0
+
+        return {"vx_body": vx, "vy_body": vy}
 # ==============================================================================
 #  All units are FEET throughout (distances, map sizes, poses, grid size).
 #
@@ -81,7 +85,7 @@ class GamepadSubscriber():
 
 UDP_HOST = '127.0.0.1'
 UDP_PORT = 6000
-
+PLOT_EVERY = 3
 # Thread-safe queue: the UDP server thread puts scan dicts here,
 # the main/plotting thread reads from here.
 scan_queue = queue.Queue()
@@ -137,9 +141,9 @@ class ParticleFilter:
             p = Particle(ogParameters, smParameters)
             self.particles.append(p)
 
-    def updateParticles(self, reading, count):
+    def updateParticles(self, reading, count. motion=False):
         for i in range(self.numParticles):
-            self.particles[i].update(reading, count)
+            self.particles[i].update(reading, count, motion)
 
     def weightUnbalanced(self):
         self.normalizeWeights()
@@ -164,15 +168,20 @@ class ParticleFilter:
                 p.weight /= weightSum
 
     def resample(self):
+        # it only deepcopies the duplicates not new particles
         weights = np.array([p.weight for p in self.particles], dtype=float)
-        tempParticles = [copy.deepcopy(p) for p in self.particles]
-        resampledIdx = np.random.choice(
-            np.arange(self.numParticles), self.numParticles, p=weights
-        )
-        for i in range(self.numParticles):
-            self.particles[i] = copy.deepcopy(tempParticles[resampledIdx[i]])
-            self.particles[i].weight = 1.0 / self.numParticles
-
+        idx = np.random.choice(self.numParticles, self.numParticles, p=weights)
+        new_particles = []
+        used = set()
+        for i in idx:
+            if i not in used:
+                used.add(i)
+                new_particles.append(self.particles[i])
+            else:
+                new_particles.append(copy.deepcopy(self.particles[i]))
+        for p in new_particles:
+            p.weight = 1.0 / self.numParticles
+        self.particles = new_particles
 
 class Particle:
     def __init__(self, ogParameters, smParameters):
@@ -198,14 +207,24 @@ class Particle:
         self.yTrajectory = []
         self.weight = 1.0
 
-    def updateEstimatedPose(self, currentRawReading):
+    def updateEstimatedPose(self, currentRawReading, motion):
+
+        # do a roation on the particle based on its vector vs time
+        theta = self.prevMatchedMovingTheta['theta']
+        dx_body = motion['vx_body'] * motion['dt']
+        dy_body = motion['vy_body'] * motion['dt']
+        dx = dx_body * math.cos(theta) - dy_body * math.sin(theta)
+        dy = dx_body * math.sin(theta) + dy_body * math.cos(theta)
+
         estimatedReading = {
-            'x':     self.prevMatchedReading['x'],
-            'y':     self.prevMatchedReading['y'],
-            'theta': self.prevMatchedReading['theta'],
+            'x':     self.prevMatchedReading['x'] + dx,
+            'y':     self.prevMatchedReading['y'] + dy,
+            'theta': theta,
             'range': currentRawReading['range'],
         }
-        return estimatedReading, 0.0, None, None
+        estMovingDist = math.hypot(dx,dy)
+        estMovingTheta = math.atan2(dy,dx) if estMovingDist > 1e-6 else None
+        return estimatedReading, estMovingDist, estMovingTheta, estMovingTheta
 
     def getMovingTheta(self, matchedReading):
         if not self.xTrajectory:
@@ -219,7 +238,7 @@ class Particle:
         cos_val = max(-1.0, min(1.0, xMove / move))
         return math.acos(cos_val) if yMove >= 0 else -math.acos(cos_val)
 
-    def update(self, reading, count):
+    def update(self, reading, count, motion= None):
         if count == 1:
             self.prevRawMovingTheta = None
             self.prevMatchedMovingTheta = None
@@ -271,8 +290,10 @@ def processSensorData(pf, source, use_udp=False, human_is=False):
       - use_udp=True   ->  source is ignored; scans are pulled from scan_queue
                            as they arrive from the UDP server
     """
+    last_scan_time = None
+    IDLE_EPS = 1e-3 # ft/sec threshold below which stick is considered centered
     count = 0
-    potential_human = np.array((0, 2))
+    potential_human = np.empty((0, 2))
     human_markers = 0
     plt.ion()
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -289,12 +310,22 @@ def processSensorData(pf, source, use_udp=False, human_is=False):
 
     def process_one(scan_entry):
         # using above variables declared
-        nonlocal count, img, pos_dot, heading_arrow
+        nonlocal count, img, pos_dot, heading_arrow, last_scan_time
         nonlocal potential_human, human_markers
         count += 1  # increases how many frames we have made
         print(f"Frame {count}")
+        now = time.monotonic()
+        
+        dt = (now - last_scan_time) if last_scan_time is not None else 0.0
+        last_scan_time = now
+        botVel = gamepad.get_velocity()
 
-        pf.updateParticles(scan_entry, count)
+        # If moving in either direction greater than idle threshold, consider the bot moving
+        isMoving = abs(botVel["vx_body"]) > IDLE_EPS or abs(botVel["vy_body"]) > IDLE_EPS
+        motion = {"vx_body": botVel["vx_body"], "vy_body": botVel["vy_body"], "dt": dt} \
+                    if isMoving else None
+        
+        pf.updateParticles(scan_entry, count, motion)
 
         if pf.weightUnbalanced():
             pf.resample()
@@ -302,6 +333,11 @@ def processSensorData(pf, source, use_udp=False, human_is=False):
 
         bestParticle = max(pf.particles, key=lambda p: p.weight)
 
+        # ---- plotting only every PLOT_EVERY frames ----
+        if count % PLOT_EVERY != 0:
+            return
+        
+        # X and Y Range of Map
         xRange = [-50, 50]
         yRange = [-50, 50]
 
@@ -313,8 +349,11 @@ def processSensorData(pf, source, use_udp=False, human_is=False):
             )
 
         xIdx, yIdx = bestParticle.og.convertRealXYToMapIdx(xRange, yRange)
-        ogMap = ratio[yIdx[0]: yIdx[1], xIdx[0]: xIdx[1]]
-        ogMap = np.flipud(1.0 - ogMap)
+        visited = bestParticle.og.occupancyGridVisited[yIdx[0]:yIdx[1], xIdx[0]:xIdx[1]]
+        total   = bestParticle.og.occupancyGridTotal  [yIdx[0]:yIdx[1], xIdx[0]:xIdx[1]]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = np.where(total > 0, visited / total, 0.5)
+        ogMap = np.flipud(1.0 - ratio)
 
         if img is None:
             img = ax.imshow(

@@ -7,7 +7,7 @@
 #include <fstream>
 #include <iomanip>
 #include <csignal> // Required for catching signals like Ctrl+C
-#define SAMPLE_RATE_MS 1000
+#define SAMPLE_RATE_MS 500
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -46,28 +46,25 @@ int main(int argc, char** argv) {
     }
     csvFile << std::fixed << std::setprecision(4);
     std::string motor_power;
+    std::string motor_voltage;
     std::string motor_torque;
-    std::string motor_velocity;
-    std::string motor_position;
     for (int i = 1; i < (MOTOR_COUNT+1); i++) {
         motor_power += "Motor " + std::to_string(i) + " Power,";
         motor_torque += "Motor " + std::to_string(i) + " Torque,";
-        motor_velocity += "Motor " + std::to_string(i) + " Velocity,";
-        motor_position += "Motor " + std::to_string(i) + " Position,";
+        motor_voltage += "Motor " + std::to_string(i) + " Velocity,";
     }
     csvFile << "Timestamp," 
-            << motor_power << motor_torque << motor_velocity 
+            << motor_power << motor_torque << motor_voltage 
             << "Battery Voltage\n";
 
     int loop_count = 1;
     while(loop_waitms(SAMPLE_RATE_MS, node) && keep_running) {
         double voltage = 0.0;
-        std::ostringstream power_ss, torque_ss, velocity_ss,
-                           abs_position_ss;
+        std::ostringstream power_ss, torque_ss, voltage_ss;
+
             power_ss << std::fixed << std::setprecision(4);
             torque_ss << std::fixed << std::setprecision(4);
-            velocity_ss << std::fixed << std::setprecision(4);
-            abs_position_ss << std::fixed << std::setprecision(4);
+            voltage_ss << std::fixed << std::setprecision(4);
 
         csvFile << loop_count << ',';
         MotorDiagnosticsArray read_val = ipc_receive(diagnostics_subscriber).value_or(init_array);
@@ -76,10 +73,9 @@ int main(int argc, char** argv) {
             voltage += read_val.motor_instance[i].voltage;
             power_ss << read_val.motor_instance[i].power << ',';
             torque_ss << read_val.motor_instance[i].torque << ',';
-            velocity_ss << read_val.motor_instance[i].velocity << ',';
-            abs_position_ss << read_val.motor_instance[i].abs_position << ',';
+            voltage_ss << read_val.motor_instance[i].velocity << ',';
         }
-        csvFile << power_ss.str() << torque_ss.str() << velocity_ss.str()
+        csvFile << power_ss.str() << torque_ss.str() << voltage_ss.str()
                 << (voltage/static_cast<double>(MOTOR_COUNT)) << '\n';
         std::cout << "battery voltage: " << (voltage/static_cast<double>(MOTOR_COUNT)) << '\n';
         loop_count++;
@@ -89,17 +85,3 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-
-        // auto event = system_listener.try_wait_one();
-        // if(event.has_value()) {
-        //     auto event_val = event.value();
-        //     if (event_val.has_value()) {
-        //         if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
-        //                 std::cout << "stopping diagnostics loop";
-        //                 break;
-        //         }
-        //         if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
-        //                 std::cout << "idk u pressed start or something";
-        //         }                
-        //     }
-        // }

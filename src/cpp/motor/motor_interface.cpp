@@ -40,15 +40,15 @@ int main(int argc, char** argv) {
         opts.id = def.can_id;
         opts.transport = def.bus;
         // disable the following replies
-        opts.query_format.mode = moteus::Resolution::kIgnore;
-        opts.query_format.position = moteus::Resolution::kIgnore;
-        opts.query_format.velocity = moteus::Resolution::kIgnore;
+        opts.query_format.mode =        moteus::Resolution::kIgnore;
+        opts.query_format.position =    moteus::Resolution::kIgnore;
+        opts.query_format.velocity =    moteus::Resolution::kIgnore;
         opts.query_format.temperature = moteus::Resolution::kIgnore;
         // enable the following replies
-        opts.query_format.voltage = moteus::Resolution::kInt8;
-        opts.query_format.torque = moteus::Resolution::kFloat; 
-        opts.query_format.power = moteus::Resolution::kFloat;  
-        opts.query_format.fault = moteus::Resolution::kInt8;
+        opts.query_format.voltage =     moteus::Resolution::kInt8;
+        opts.query_format.torque =      moteus::Resolution::kFloat; 
+        opts.query_format.power =       moteus::Resolution::kFloat;  
+        opts.query_format.fault =       moteus::Resolution::kInt8;
     
         // populate BusGroup directly using key-value pairs
         // if already exists, then retrieve reference. Otherwise, create

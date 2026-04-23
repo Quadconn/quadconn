@@ -2,7 +2,8 @@ conf set servo.max_current_A 12.000000
 conf set servo.pid_position.kp 2.216838
 conf set servo.pid_position.ki 0.000000
 conf set servo.pid_position.kd 0.022168
-conf set servo.max_velocity 20.000000
+conf set servo.max_velocity 20
+conf set servo.max_acceleration 100
 conf set servopos.position_max nan
 conf set servopos.position_min nan
 conf write

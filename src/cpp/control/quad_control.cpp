@@ -195,7 +195,8 @@ QuadControl::Mode QuadControl::step_shutdown() {
     static const double height_step = config::MAX_HEIGHT_RATE * common::DT;
 
     double z_clearance = abs(_height + height_step);
-    if ((0.04 < z_clearance)) {
+    // TODO DR: Make a constexpr for this
+    if ((0.05 < z_clearance)) {
         _height += height_step;
 
         for (std::size_t i = 0; i < common::LEG_COUNT; i++) {

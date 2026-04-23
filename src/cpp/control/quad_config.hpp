@@ -45,7 +45,7 @@ namespace quad::config {
     // Kinematic Lengths
     inline constexpr double ABDUCTION_OFFSET = 0.10300;
     inline constexpr double L1               = 0.19625;
-    inline constexpr double L2               = 0.20356;
+    inline constexpr double L2               = 0.16631;
     inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
     inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
 
@@ -54,14 +54,14 @@ namespace quad::config {
     // z direction delta of swing height
     inline constexpr double z_delta_swing_height  = 0.04;
     // Max clearance between body and foot in z direction
-    inline constexpr double z_clearance_max = L1 + L2;
+    inline constexpr double z_clearance_max = L1 + L2 - 0.05;
     // Min clearance between body and foot in z direction
     inline constexpr double z_clearance_min = L1;
 
     // Commanded config values
-    static inline const double MAX_HORIZONTAL_VELOCITY_X = 0.15;
-    static inline const double MAX_HORIZONTAL_VELOCITY_Y = 0.10;
-    static inline const double MAX_YAW_RATE = 0.3;
+    static inline const double MAX_HORIZONTAL_VELOCITY_X = 0.25;
+    static inline const double MAX_HORIZONTAL_VELOCITY_Y = 0.25;
+    static inline const double MAX_YAW_RATE = 0.45;
     static inline const double MAX_HEIGHT_RATE = 0.1;
 
     // Contact modes
@@ -110,10 +110,10 @@ namespace quad::config {
 
     // Default/Idle foot locations relative to center of body
     inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> DEFAULT_STANCE {
-        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
-        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{ LEG_FB - 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{ LEG_FB - 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{-LEG_FB + 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{-LEG_FB + 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
 
     inline constexpr BodyJointAngles STARTUP_ANGLES = {{

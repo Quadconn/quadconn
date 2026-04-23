@@ -46,25 +46,25 @@ int main(int argc, char** argv) {
     }
     csvFile << std::fixed << std::setprecision(4);
     std::string motor_power;
-    std::string motor_voltage;
+    std::string motor_temperature;
     std::string motor_torque;
     for (int i = 1; i < (MOTOR_COUNT+1); i++) {
         motor_power += "Motor " + std::to_string(i) + " Power,";
         motor_torque += "Motor " + std::to_string(i) + " Torque,";
-        motor_voltage += "Motor " + std::to_string(i) + " Velocity,";
+        motor_temperature += "Motor " + std::to_string(i) + " Velocity,";
     }
     csvFile << "Timestamp," 
-            << motor_power << motor_torque << motor_voltage 
+            << motor_power << motor_torque << motor_temperature 
             << "Battery Voltage\n";
 
     int loop_count = 1;
     while(loop_waitms(SAMPLE_RATE_MS, node) && keep_running) {
         double voltage = 0.0;
-        std::ostringstream power_ss, torque_ss, voltage_ss;
+        std::ostringstream power_ss, torque_ss, temperature_ss;
 
             power_ss << std::fixed << std::setprecision(4);
             torque_ss << std::fixed << std::setprecision(4);
-            voltage_ss << std::fixed << std::setprecision(4);
+            temperature_ss << std::fixed << std::setprecision(4);
 
         csvFile << loop_count << ',';
         MotorDiagnosticsArray read_val = ipc_receive(diagnostics_subscriber).value_or(init_array);
@@ -73,9 +73,9 @@ int main(int argc, char** argv) {
             voltage += read_val.motor_instance[i].voltage;
             power_ss << read_val.motor_instance[i].power << ',';
             torque_ss << read_val.motor_instance[i].torque << ',';
-            voltage_ss << read_val.motor_instance[i].velocity << ',';
+            temperature_ss << read_val.motor_instance[i].temperature << ',';
         }
-        csvFile << power_ss.str() << torque_ss.str() << voltage_ss.str()
+        csvFile << power_ss.str() << torque_ss.str() << temperature_ss.str()
                 << (voltage/static_cast<double>(MOTOR_COUNT)) << '\n';
         std::cout << "battery voltage: " << (voltage/static_cast<double>(MOTOR_COUNT)) << '\n';
         loop_count++;

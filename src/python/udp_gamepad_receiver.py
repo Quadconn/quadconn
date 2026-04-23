@@ -71,6 +71,8 @@ def main():
 
     try:
         while True:
+
+            node.wait(iox2.Duration.from_millis(10))
             # 1. Receive data from the Edge PC over UDP
             # recvfrom is a blocking call, so the loop naturally paces itself 
             # to the incoming 100Hz network stream.

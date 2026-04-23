@@ -15,7 +15,8 @@
 #include "system_logic.hpp"
 #include "iox2/iceoryx2.hpp"
 
-
+#define ACCEL_LIMIT 2000
+#define KP_SCALE    1.0
 int main(int argc, char** argv) {
     using namespace mjbots;
     using namespace iox2;
@@ -43,13 +44,13 @@ int main(int argc, char** argv) {
         opts.query_format.mode =        moteus::Resolution::kIgnore;
         opts.query_format.position =    moteus::Resolution::kIgnore;
         opts.query_format.velocity =    moteus::Resolution::kIgnore;
-        opts.query_format.temperature = moteus::Resolution::kIgnore;
         // enable the following replies
         opts.query_format.voltage =     moteus::Resolution::kInt8;
         opts.query_format.torque =      moteus::Resolution::kFloat; 
         opts.query_format.power =       moteus::Resolution::kFloat;  
         opts.query_format.fault =       moteus::Resolution::kInt8;
-    
+        opts.query_format.temperature = moteus::Resolution::kInt8;
+
         // populate BusGroup directly using key-value pairs
         // if already exists, then retrieve reference. Otherwise, create
         // another key-value pair
@@ -125,7 +126,9 @@ int main(int argc, char** argv) {
                                                     // legs and joint_types are indexable by integer
                         double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
                         cmd.position = rad2turns(angle_cmd);
-                        cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
+                        cmd.velocity = std::numeric_limits<double>::quiet_NaN();
+                        cmd.accel_limit = ACCEL_LIMIT; 
+                        cmd.kp_scale = KP_SCALE;
                         // index vector like array (avoid push_back resizing)
                         group.frames[i] = group.controllers[i]->MakePosition(cmd);
                     }

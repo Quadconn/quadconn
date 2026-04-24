@@ -32,3 +32,33 @@ target_link_libraries(udp_sender
         moteus
         common
 )
+
+add_executable(sf45_collector)
+
+target_sources(sf45_collector
+    PRIVATE
+        sf45_collector.cpp
+        
+)
+
+target_link_libraries(sf45_collector 
+    PRIVATE 
+        PkgConfig::GST  # This automatically handles includes AND libs
+        iceoryx2-cxx::static-lib-cxx
+        common
+)
+
+add_executable(raw_lidar)
+
+target_sources(raw_lidar
+    PRIVATE
+        raw_lidar.cpp
+        
+)
+
+target_link_libraries(raw_lidar 
+    PRIVATE 
+        PkgConfig::GST  # This automatically handles includes AND libs
+        iceoryx2-cxx::static-lib-cxx
+        common
+)

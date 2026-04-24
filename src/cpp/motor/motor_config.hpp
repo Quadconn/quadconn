@@ -51,19 +51,17 @@ inline std::shared_ptr<mjbots::moteus::Fdcanusb> init_bus(const std::string& por
 inline const std::array<MotorDef, MOTOR_NUM>& get_robot_config() {
     // Because these are static, they are initialized exactly ONCE, 
     // the first time this function is called.
-    static const auto bus_green =    init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00"); 
+    static const auto bus_red =    init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_188998B3-if00"); 
     static const auto bus_yellow = init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_9C92C905-if00"); 
-    static const auto bus_red =  init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_6A9ABCBD-if00"); 
+    static const auto bus_green =  init_bus("/dev/serial/by-id/usb-mjbots_fdcanusb_6A9ABCBD-if00"); 
 
     static const std::array<MotorDef, MOTOR_NUM> config = {{
     //can-id  wire        leg             joint
-        {11,  bus_yellow, quad::common::FL, KNEE_IDX}, {8,  bus_yellow, quad::common::FL, HIP_PITCH_IDX}, {4,  bus_green, quad::common::FL, HIP_ROLL_IDX},
-        {9,  bus_yellow, quad::common::FR, KNEE_IDX}, {10,  bus_yellow, quad::common::FR, HIP_PITCH_IDX}, {7,  bus_green, quad::common::FR, HIP_ROLL_IDX},
-        {12,  bus_red, quad::common::BL, KNEE_IDX}, {2,  bus_red, quad::common::BL, HIP_PITCH_IDX}, {6,  bus_green, quad::common::BL, HIP_ROLL_IDX},
-        {3, bus_red, quad::common::BR, KNEE_IDX}, {1, bus_red, quad::common::BR, HIP_PITCH_IDX}, {5, bus_green, quad::common::BR, HIP_ROLL_IDX}
+        {4 , bus_yellow, quad::common::FL, KNEE_IDX}, {3 , bus_yellow, quad::common::FL, HIP_PITCH_IDX}, {8, bus_green, quad::common::FL, HIP_ROLL_IDX},
+        {2 , bus_yellow, quad::common::FR, KNEE_IDX}, {12, bus_yellow, quad::common::FR, HIP_PITCH_IDX}, {5, bus_green, quad::common::FR, HIP_ROLL_IDX},
+        {11, bus_red   , quad::common::BL, KNEE_IDX}, {1 , bus_red   , quad::common::BL, HIP_PITCH_IDX}, {6, bus_green, quad::common::BL, HIP_ROLL_IDX},
+        {10, bus_red   , quad::common::BR, KNEE_IDX}, {9 , bus_red   , quad::common::BR, HIP_PITCH_IDX}, {7, bus_green, quad::common::BR, HIP_ROLL_IDX }
     }};
-
-
 
     return config;
 }

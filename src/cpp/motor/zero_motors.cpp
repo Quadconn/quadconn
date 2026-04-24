@@ -9,17 +9,18 @@
 #include "moteus.h"
 #include "motor_diagnostics.hpp"
 #include "motor_config.hpp"
-
+#include "quad_common.hpp"
 
 int main(int argc, char** argv) {
     using namespace mjbots;
 
     // Define initial positions, indexed as N+1 as nodes
     std::array<double, MOTOR_COUNT> zero_positions = 
-    {rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
-     rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
-     rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0),
-     rad2turns(0.0),               rad2turns(0.0),      rad2turns(0.0)};
+    {quad::common::BL_HIP_PITCH_0,  quad::common::FR_KNEE_0,     quad::common::FL_HIP_PITCH_0, 
+     quad::common::FL_KNEE_0,       quad::common::FR_HIP_ROLL_0, quad::common::BL_HIP_ROLL_0,
+     quad::common::BR_HIP_ROLL_0,   quad::common::FL_HIP_ROLL_0, quad::common::BR_HIP_PITCH_0,
+     quad::common::BR_KNEE_0,       quad::common::BL_KNEE_0,     quad::common::FR_HIP_PITCH_0
+    };
 
     // Initialize Controllers
     std::cout << "initializing motors\n";
@@ -78,7 +79,7 @@ int main(int argc, char** argv) {
             // d cfg-set-output: updates the 'motor_position.sources.0.offset' config
             std::string sync_cmd = "d cfg-set-output " + std::to_string(zero_positions[idx]);
             try {
-                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << " turns...\n";
+                std::cout << "Calibrating Motor " << id << " to " << zero_positions[idx] << "turns\n";
                 
                 // Execute the sequence
                 group.controllers[i]->DiagnosticCommand(exact_cmd);    // Set runtime position

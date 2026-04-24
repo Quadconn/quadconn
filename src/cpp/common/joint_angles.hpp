@@ -1,9 +1,9 @@
 #pragma once
 
 #include <iostream>
-
 #include "quad_common.hpp"
 
+// TODO DR: Figure out why quite_NaN breaks python simulation. For now removing.
 struct LegJointAngles {
     double hip_roll;
     double hip_pitch;

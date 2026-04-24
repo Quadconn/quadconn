@@ -2,6 +2,7 @@ import ctypes
 import socket
 import time
 import os
+import sys  # FIX: Required for sys.exit()
 
 # Hide the Pygame welcome message
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
@@ -22,18 +23,22 @@ class WindowsControllerState:
         self.joystick.init()
         print(f"[OK] Gamepad found: {self.joystick.get_name()}")
 
+    def _deadzone(self, joystick_input):
+        return 0.0 if abs(joystick_input) < 0.05 else joystick_input
+
     def read(self) -> GamepadData:
         """
         Reads the current state from XInput via Pygame and returns the ctypes structure.
         """
-        # CRITICAL FIX: Pump the event queue in the main thread right before reading!
-        pygame.event.pump()
+        # FIX: clear() handles internal OS events AND empties the Pygame queue.
+        # This prevents memory bloat and locking up, unlike pump() which just fills the queue.
+        pygame.event.clear()
 
         # --- Axes ---
-        lx = self.joystick.get_axis(0)
-        ly = -self.joystick.get_axis(1)
-        rx = self.joystick.get_axis(2)
-        ry = -self.joystick.get_axis(3)
+        lx = -self._deadzone(self.joystick.get_axis(0))
+        ly = -self._deadzone(self.joystick.get_axis(1))
+        rx = -self._deadzone(self.joystick.get_axis(2))
+        ry = -self._deadzone(self.joystick.get_axis(3))
         
         # Map triggers (convert -1.0 -> 1.0 range to 0.0 -> 1.0)
         lt_raw = self.joystick.get_axis(4) if self.joystick.get_numaxes() > 4 else -1.0
@@ -52,7 +57,6 @@ class WindowsControllerState:
         btn = lambda idx: self.joystick.get_button(idx) if idx < self.joystick.get_numbuttons() else 0
 
         # Standard Pygame Xbox button mapping
-        # 0:A, 1:B, 2:X, 3:Y, 4:LB, 5:RB, 6:Select, 7:Start, 8:L3, 9:R3, 10:Guide
         return GamepadData(
             dpad_x=int(dpad_x),
             dpad_y=int(dpad_y),
@@ -78,7 +82,7 @@ class WindowsControllerState:
 # --- Network & Usage Example ---
 if __name__ == "__main__":
     # --- Network Config ---
-    HOST_PC_IP = "100.81.189.79"  
+    HOST_PC_IP = "100.81.189.79"
     UDP_PORT = 3006
     CYCLE_TIME_SEC = 0.01         # 10ms cycle time (100 Hz)
 
@@ -86,29 +90,35 @@ if __name__ == "__main__":
         controller = WindowsControllerState()
         print("Controller Interface Running...")
     except IOError as e:
-        print(e)
-        exit(1)
+        print(f"\n[ERROR] {e}")
+        # FIX: Give the user a chance to read the error before the terminal vanishes
+        input("Press Enter to exit...") 
+        sys.exit(1)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     print(f"Streaming data via UDP to {HOST_PC_IP}:{UDP_PORT}")
 
     try:
         while True:
-            #  Fetch populated ctypes structure
-            data = controller.read()
+            # Fetch populated ctypes structure
+            try:
+                data = controller.read()
+            except pygame.error as e:
+                # FIX: Catch disconnects or bad reads gracefully instead of crashing
+                print(f"\n[ERROR] Controller disconnected or read error: {e}")
+                break
             
-            # Print to terminal so you can verify the sticks/buttons are working
-            # print(f"\r{data}", end="") 
-            
-            #  Pack it into bytes
+            # Pack it into bytes
             payload = bytes(data)
         
-            #  Send over network
+            # Send over network
             sock.sendto(payload, (HOST_PC_IP, UDP_PORT))
 
             time.sleep(CYCLE_TIME_SEC)
 
     except KeyboardInterrupt:
         print("\nStopping cleanly...")
+    finally:
+        # FIX: Ensure sockets and pygame ALWAYS close out, even if an exception breaks the loop
         sock.close()
         pygame.quit()

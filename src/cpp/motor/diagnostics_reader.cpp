@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < (MOTOR_COUNT+1); i++) {
         motor_power += "Motor " + std::to_string(i) + " Power,";
         motor_torque += "Motor " + std::to_string(i) + " Torque,";
-        motor_temperature += "Motor " + std::to_string(i) + " Velocity,";
+        motor_temperature += "Motor " + std::to_string(i) + " Temperature,";
     }
     csvFile << "Timestamp," 
             << motor_power << motor_torque << motor_temperature 

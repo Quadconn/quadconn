@@ -6,14 +6,72 @@ import datetime
 import time
 
 # PyQt6 UI Components
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QTimer, QPointF
 from PyQt6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QHBoxLayout,
                              QWidget, QGridLayout, QPushButton, QLineEdit, QSlider)
+from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
 
 # Custom Imports from your modular files
 from configurations import *
 from workers import VideoThread, TelemetryReceiver, AudioReceiveThread, AudioSendThread
 from motor_diagnostics import MOTOR_COUNT
+
+class LidarMapWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(780, 350)
+        self.grid_map = None 
+        self.is_human_detected = False
+
+    def update_grid(self, grid_map):
+        """Receives the persistent numpy array from the SlamProcessor."""
+        self.grid_map = grid_map
+        self.update()
+
+    def set_human_status(self, is_human):
+        """Updates the visual state if the YOLO worker detects a person."""
+        self.is_human_detected = is_human
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(event.rect(), QColor(25, 25, 25))
+        painter.setPen(QPen(QColor(60, 60, 60), 1))
+        painter.drawRect(0, 0, self.width()-1, self.height()-1)
+        
+        if self.grid_map is None:
+            # Draw a crosshair if no data is present
+            painter.setPen(QPen(QColor(40, 40, 40), 1, Qt.PenStyle.DashLine))
+            painter.drawLine(self.width()//2, 0, self.width()//2, self.height())
+            painter.drawLine(0, self.height()//2, self.width(), self.height()//2)
+            return
+
+        rows, cols = self.grid_map.shape
+        cell_w = self.width() / cols
+        cell_h = self.height() / rows
+
+        # Iterate through the Grid Map and paint the cells
+        for y in range(rows):
+            for x in range(cols):
+                val = self.grid_map[y, x]
+                
+                if val == 2: # WALL / OBSTACLE
+                    # If AI sees a human, turn walls red; otherwise, keep them green
+                    color = QColor(255, 0, 0) if self.is_human_detected else QColor(0, 255, 0)
+                    painter.fillRect(int(x * cell_w), int(y * cell_h), 
+                                     int(cell_w) + 1, int(cell_h) + 1, color)
+                
+                elif val == 1: # EMPTY / CLEARED SPACE (Floor)
+                    # We use a dark grey to show where the robot has already 'seen'
+                    painter.fillRect(int(x * cell_w), int(y * cell_h), 
+                                     int(cell_w) + 1, int(cell_h) + 1, QColor(40, 40, 40))
+
+        # Draw the Robot Icon
+        center_x = self.width() // 2
+        center_y = self.height() // 2
+        painter.setBrush(QBrush(QColor(255, 255, 255)))
+        painter.setPen(QPen(QColor(200, 200, 200), 1))
+        painter.drawRect(center_x - 5, center_y - 5, 10, 10)
 
 ## Main User Interface ##
 class QuadconnDashboard(QWidget):
@@ -21,21 +79,35 @@ class QuadconnDashboard(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Quadconn Senior Design Dashboard")
-        self.setFixedSize(1200, 750)
+        self.setFixedSize(1200, 800)
         self.setStyleSheet("background-color: #0A0A0A; color: #FFFFFF;")
         
         # Main Layout
         main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Left Column (Video + Lidar)
+        left_column = QVBoxLayout()
+        left_column.setSpacing(20)
+
+        left_column.addStretch()
         
         # Live Video Display Label
         self.video_label = QLabel("PASTE YOUR TAILSCALE IP & START SYSTEM")
         self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.video_label.setFixedSize(780, 580)
+        self.video_label.setFixedSize(780, 350)
         self.video_label.setStyleSheet("border: 2px solid #333; background-color: black;")
-        main_layout.addWidget(self.video_label)
+
+        # Radar Widget
+        left_column.addWidget(self.video_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.lidar_map = LidarMapWidget()
+        left_column.addWidget(self.lidar_map, alignment=Qt.AlignmentFlag.AlignCenter)
+        left_column.addStretch()
+        main_layout.addLayout(left_column)
         
         # Sidebar Container
         self.sidebar = QVBoxLayout()
+        self.sidebar.setSpacing(8)
         
         # Configuration Section
         self.sidebar.addWidget(QLabel("YOUR TAILSCALE IP:"))
@@ -61,15 +133,6 @@ class QuadconnDashboard(QWidget):
         self.slider_vol.setRange(0, 100); self.slider_vol.setValue(80)
         self.slider_vol.valueChanged.connect(self.update_speaker_volume)
         self.sidebar.addWidget(self.slider_vol)
-        
-        # Status Header
-        self.status_header = QHBoxLayout()
-        self.lbl_volt = QLabel("BATTERY: -- V")
-        self.lbl_status = QLabel("OFFLINE")
-        self.lbl_status.setStyleSheet("font-size: 14px; color: #FF0000; font-weight: bold; border: 1px solid #FF0000; padding: 4px;")
-        self.status_header.addWidget(self.lbl_volt)
-        self.status_header.addWidget(self.lbl_status)
-        self.sidebar.addLayout(self.status_header)
 
         # AI Control Button
         self.btn_ai = QPushButton("PERSON DETECTION: READY")
@@ -83,6 +146,40 @@ class QuadconnDashboard(QWidget):
         self.lbl_ai_proximity.setStyleSheet("background-color: #111; border: 1px solid #555; color: #555; padding: 5px; font-weight: bold;")
         self.sidebar.addWidget(self.lbl_ai_proximity)
 
+        # Status Header (Diagnostics)
+        self.status_header = QVBoxLayout()
+        
+        # Row 1: Battery and Power
+        row1 = QHBoxLayout()
+        self.lbl_volt = QLabel("BATT: -- V")
+        self.lbl_power = QLabel("PWR: -- W")
+        row1.addWidget(self.lbl_volt)
+        row1.addWidget(self.lbl_power)
+        self.status_header.addLayout(row1)
+        
+        # Row 2: Connection and Health
+        row2 = QHBoxLayout()
+        self.lbl_status = QLabel("OFFLINE")
+        self.lbl_status.setStyleSheet("color: #FF0000; font-weight: bold; border: 1px solid #FF0000; padding: 4px;")
+        
+        self.lbl_health = QLabel("SYSTEM: OK")
+        self.lbl_health.setStyleSheet("color: #00FF00; font-weight: bold;")
+        
+        row2.addWidget(self.lbl_status)
+        row2.addWidget(self.lbl_health)
+        self.status_header.addLayout(row2)
+        
+        self.sidebar.addLayout(self.status_header)
+
+        # Alert Banner
+        self.lbl_alert_banner = QLabel("SYSTEM HEALTHY")
+        self.lbl_alert_banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_alert_banner.setFixedHeight(40)
+        self.lbl_alert_banner.setStyleSheet("background-color: #002200; color: #00FF00; font-weight: bold; border: 1px solid #00FF00;")
+        self.sidebar.insertWidget(0, self.lbl_alert_banner) 
+        
+        self.last_popup_time = 0
+
         # Record Function
         self.btn_record = QPushButton("START RECORDING")
         self.btn_record.setStyleSheet("background-color: #222; border: 1px solid #FF0000; color: #FF0000; padding: 10px; font-weight: bold;")
@@ -91,6 +188,7 @@ class QuadconnDashboard(QWidget):
         
         # 12-Motor Grid
         self.grid = QGridLayout()
+        self.grid.setSpacing(4)
         self.motor_labels = []
         for i in range(MOTOR_COUNT):
             lbl = QLabel(f"M{i+1}\nWAITING...")
@@ -99,6 +197,13 @@ class QuadconnDashboard(QWidget):
             self.grid.addWidget(lbl, i // 3, i % 3)
             self.motor_labels.append(lbl)
         self.sidebar.addLayout(self.grid)
+
+        # Reset Recon Map Button
+        self.btn_reset_map = QPushButton("RESET RECON MAP")
+        self.btn_reset_map.setStyleSheet("background-color: #222; border: 1px solid #555; color: #FFF; padding: 10px; font-weight: bold;")
+        self.btn_reset_map.clicked.connect(self.reset_map)
+        self.sidebar.addWidget(self.btn_reset_map)
+
         self.sidebar.addStretch()
         
         main_layout.addLayout(self.sidebar)
@@ -115,6 +220,13 @@ class QuadconnDashboard(QWidget):
         self.video_thread.ai_status_signal.connect(self.update_ai_button_status)
         self.video_thread.start()
 
+        # Add LiDAR worker
+        from workers import LidarReceiver
+        self.lidar_thread = LidarReceiver()
+        self.lidar_thread.data_received.connect(self.handle_lidar_data)
+        self.lidar_thread.map_updated.connect(self.lidar_map.update_grid)
+        self.lidar_thread.start()
+
         # Local audio threads initialization
         self.audio_recv_thread = AudioReceiveThread(); self.audio_recv_thread.start()
         self.audio_send_thread = AudioSendThread(self.video_thread.robot_ip); self.audio_send_thread.start()
@@ -123,6 +235,18 @@ class QuadconnDashboard(QWidget):
         self.record_timer = QTimer()
         self.record_timer.timeout.connect(self.update_recording_timer)
         self.record_start_time = 0
+
+    def handle_lidar_data(self, ranges):
+        # Passes the ranges and the AI human status to the map
+        is_human = self.video_thread.is_person_in_view()
+        self.lidar_map.set_human_status(is_human)
+
+    def reset_map(self):
+        # Access the slam instance inside the thread and wipe the numpy array
+        self.lidar_thread.slam.map.fill(0)
+        # Force the widget to refresh the screen
+        self.lidar_map.update_grid(self.lidar_thread.slam.map)
+        print("RECON MAP RESET: Memory cleared.")
 
     def restart_hardware_action(self):
         # Passes manual host IP to video thread and triggers robot
@@ -196,7 +320,11 @@ class QuadconnDashboard(QWidget):
 
     def update_video(self, pixmap):
         # Renders latest processed frame to UI
-        self.video_label.setPixmap(pixmap.scaled(self.video_label.size(), Qt.AspectRatioMode.KeepAspectRatio))
+        self.video_label.setPixmap(pixmap.scaled(
+            self.video_label.size(), 
+            Qt.AspectRatioMode.IgnoreAspectRatio, 
+            Qt.TransformationMode.SmoothTransformation
+        ))
 
         # Check the boolean state from workers.py
         is_human = self.video_thread.is_person_in_view()
@@ -215,20 +343,67 @@ class QuadconnDashboard(QWidget):
         self.lbl_status.setStyleSheet(f"color: {'#00FF00' if is_online else '#FF0000'}; border: 1px solid {'#00FF00' if is_online else '#FF0000'}; padding: 4px;")
 
     def update_telemetry(self, data):
-        # Calculates battery health and updates motor grid with fault highlights
+        from PyQt6.QtWidgets import QMessageBox
+        
         total_v = 0
+        total_p = 0
+        faults = []
+
+        # Aggregate data
         for i in range(MOTOR_COUNT):
             m = data.motor_instance[i]
             total_v += m.voltage
-            self.motor_labels[i].setText(f"M{i+1} | {m.position:.2f}\n{m.voltage:.1f}V")
-            color = "#00FF00" if m.fault == 0 else "#FF0000"
-            self.motor_labels[i].setStyleSheet(f"border: 2px solid {color}; color: {color}; font-size: 10px; font-weight: bold;")
-        self.lbl_volt.setText(f"BATTERY: {total_v/MOTOR_COUNT:.1f} V")
+            total_p += m.power
+            if m.fault != 0:
+                faults.append(f"M{i+1}")
+            
+            # Color individual motor boxes based on power/fault
+            m_color = "#FF0000" if m.fault != 0 or m.power > (POWER_LIMIT_W/12) else "#00FF00"
+            self.motor_labels[i].setStyleSheet(f"border: 1px solid {m_color}; color: {m_color}; font-size: 10px;")
+            self.motor_labels[i].setText(f"M{i+1} | {m.position:.1f}\n{m.voltage:.1f}V | {m.power:.1f}W")
+
+        avg_v = total_v / MOTOR_COUNT
+        self.lbl_volt.setText(f"BATT: {avg_v:.1f} V")
+        self.lbl_power.setText(f"PWR: {total_p:.1f} W")
+
+        # Evaluate system health
+        current_alert = ""
+        is_critical = False
+
+        if avg_v < VOLT_CRITICAL:
+            current_alert = "CRITICAL BATTERY"
+            is_critical = True
+        elif faults:
+            current_alert = f"MOTOR FAULT: {', '.join(faults)}"
+            is_critical = True
+        elif total_p > POWER_LIMIT_W:
+            current_alert = "HIGH POWER DRAW WARNING"
+        
+        # Update visuals
+        if is_critical:
+            self.lbl_alert_banner.setText(f"{current_alert}")
+            self.lbl_alert_banner.setStyleSheet("background-color: #770000; color: #FFFFFF; font-weight: bold; border: 2px solid #FF0000;")
+            self.lbl_volt.setStyleSheet("color: #FF0000; font-size: 14px; font-weight: bold;")
+            
+            # Only pop up if it's been more than 30 seconds since the last one
+            if time.time() - self.last_popup_time > 30:
+                self.last_popup_time = time.time()
+                QMessageBox.critical(self, "SYSTEM ALERT", f"CRITICAL FAILURE DETECTED:\n{current_alert}")
+        
+        elif current_alert: # Warning state
+            self.lbl_alert_banner.setText(f"NOTICE: {current_alert}")
+            self.lbl_alert_banner.setStyleSheet("background-color: #443300; color: #FFA500; font-weight: bold; border: 1px solid #FFA500;")
+        
+        else: # All systems green
+            self.lbl_alert_banner.setText("SYSTEM HEALTHY")
+            self.lbl_alert_banner.setStyleSheet("background-color: #002200; color: #00FF00; font-weight: bold; border: 1px solid #00FF00;")
+            self.lbl_volt.setStyleSheet("color: #FFFFFF;")
 
     def closeEvent(self, event):
         # Ensures local and remote processes are killed when closing the window
         self.telem_thread.stop()
         self.video_thread.stop()
+        self.lidar_thread.stop()
         event.accept()
 
 if __name__ == "__main__":

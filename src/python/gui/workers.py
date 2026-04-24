@@ -1,11 +1,13 @@
 ### WORKERS ###
 
+import json
 import socket
 import subprocess
 import numpy as np
 import cv2
 import time
 import threading
+import math
 from ctypes import sizeof, memmove, addressof
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 from PyQt6.QtGui import QImage, QPixmap
@@ -86,6 +88,137 @@ class AudioSendThread(QThread):
         # Safely stops the GLib loop and releases the GStreamer hardware
         if self.loop: self.loop.quit()
         if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
+
+class LidarReceiver(QThread):
+    # Catches JSON-serialized LiDAR scans and processes them into a global map
+    data_received = pyqtSignal(list)
+    map_updated = pyqtSignal(np.ndarray)
+
+    def __init__(self):
+        super().__init__()
+        self.running = True
+        self.daemon = True
+        # Create our SLAM engine instance here
+        self.slam = SlamProcessor(map_size_ft=60, resolution_ft=0.2)
+
+    def run(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(1.0)
+        try:
+            sock.bind(("0.0.0.0", LIDAR_UDP_PORT))
+            print(f"LiDAR Receiver Active on Port {LIDAR_UDP_PORT}")
+        except Exception as e:
+            print(f"LiDAR Socket Error: {e}")
+            return
+
+        while self.running:
+            try:
+                data, addr = sock.recvfrom(65535)
+                scan_dict = json.loads(data.decode('utf-8'))
+                
+                if "range" in scan_dict:
+                    # Grab the 'Pose' from the robot (even if hardcoded for now)
+                    rx = scan_dict.get("x", 0.0)
+                    ry = scan_dict.get("y", 0.0)
+                    rt = scan_dict.get("theta", 0.0)
+
+                    # Feed the SLAM processor
+                    self.slam.update(scan_dict["range"], rx, ry, rt)
+
+                    # Emit the raw ranges for the radar view (current behavior)
+                    self.data_received.emit(scan_dict["range"])
+                    
+                    # Emit the full persistent map for the reconnaissance view
+                    self.map_updated.emit(self.slam.map)
+
+            except socket.timeout:
+                continue
+            except Exception as e:
+                print(f"LiDAR Parse Error: {e}")
+        
+        sock.close()
+
+    def stop(self):
+        self.running = False
+        self.quit()
+
+class SlamProcessor:
+    def __init__(self, map_size_ft=100, resolution_ft=0.2):
+        self.res = resolution_ft
+        self.grid_size = int(map_size_ft / resolution_ft)
+        self.map = np.zeros((self.grid_size, self.grid_size), dtype=np.int8) 
+        self.offset = self.grid_size // 2
+
+        # Scan Matching State
+        self.prev_scan = None
+        self.robot_theta = 0.0  # Our internal "guessed" heading
+        self.deg_per_index = 120.0 / 300.0 # 0.4 degrees per sample
+
+    def estimate_rotation(self, current_scan):
+        """Finds the best-fit rotation shift between current and previous scan."""
+        if self.prev_scan is None:
+            self.prev_scan = current_scan
+            return 0.0
+
+        best_shift = 0
+        min_error = float('inf')
+        
+        # We search +/- 25 indices (approx +/- 10 degrees) for the best fit
+        for shift in range(-25, 26):
+            # Roll the current scan to simulate rotation
+            rolled_scan = np.roll(current_scan, shift)
+            
+            # Calculate Absolute Error (Ignoring zeros/infinity)
+            error = np.sum(np.abs(rolled_scan - self.prev_scan))
+            
+            if error < min_error:
+                min_error = error
+                best_shift = shift
+
+        # Update persistent scan for the next comparison
+        self.prev_scan = current_scan
+        
+        # Convert index shift to radians
+        delta_theta = math.radians(best_shift * self.deg_per_index)
+        return delta_theta
+
+    def update(self, scan_data, robot_x, robot_y, robot_theta_unused):
+        # Convert input list to numpy array for fast math
+        current_scan_np = np.array(scan_data)
+
+        # Update internal heading guess
+        delta_t = self.estimate_rotation(current_scan_np)
+        self.robot_theta += delta_t
+
+        # Perform Raycasting using guessed theta
+        for i, r in enumerate(scan_data):
+            # Filtering out-of-range or noise
+            if r >= 160.0 or r <= 0.5: continue 
+
+            # Calculate the angle for this specific laser beam
+            scan_angle = math.radians((i * self.deg_per_index) - 60)
+            total_angle = self.robot_theta + scan_angle
+
+            # Target wall grid coordinates
+            gx = int((robot_x + r * math.sin(total_angle)) / self.res) + self.offset
+            gy = int((robot_y - r * math.cos(total_angle)) / self.res) + self.offset
+
+            # Raycasting
+            num_steps = int(r / self.res)
+            for step in range(num_steps):
+                dist = step * self.res
+                step_x = int((robot_x + dist * math.sin(total_angle)) / self.res) + self.offset
+                step_y = int((robot_y - dist * math.cos(total_angle)) / self.res) + self.offset
+                
+                if 0 <= step_x < self.grid_size and 0 <= step_y < self.grid_size:
+                    if self.map[step_y, step_x] != 2:
+                        self.map[step_y, step_x] = 1 
+
+            # Mark the wall
+            if 0 <= gx < self.grid_size and 0 <= gy < self.grid_size:
+                self.map[gy, gx] = 2
+
+        print(f"Internal Heading: {math.degrees(self.robot_theta):.1f}° | Wall Points: {np.count_nonzero(self.map == 2)}")
 
 class TelemetryReceiver(QThread):
     # Handles background UDP reception of motor diagnostic data on Port 808 by directly mapping raw network bytes into C-style memory structures
@@ -309,32 +442,46 @@ class VideoThread(QThread):
         if not self.host_ip: return
         print(f"Connecting to robot at {self.robot_ip}...")
         
+        # Dynamically locate the USB microphone hardware card ID
+        find_card = (
+            "export PATH=$PATH:/usr/bin:/usr/local/bin:/bin; "
+            "CARD_ID=$(arecord -l | grep \"USB PnP Sound Device\" | cut -d\" \" -f2 | tr -d \":\"); "
+            "if [ -z \"$CARD_ID\" ]; then CARD_ID=2; fi"
+        )
+
+       # Apply maximum hardware gain and unmute the audio input
+        mic_setup = "amixer -c $CARD_ID cset name=\"Mic Capture Volume\" 16; amixer -c $CARD_ID cset name=\"Mic Capture Switch\" on "
+
         # Force kill video and old GStreamer audio pipes
         cleanup = (
             f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} "
-            f"\"sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0; sudo fuser -k /dev/video0\""
+            f"'{find_card}; {mic_setup}; sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0'"
         )
         subprocess.run(cleanup, shell=True)
         
-        # Launch binary pointing back to this computer
+        # Define binary execution command for camera stream
         launch_video = f"{self.robot_exec} {self.host_ip}"
         
         # Robot Mic -> Host (Port 3004)
+        audio_caps = "audio/x-raw,rate=48000,channels=1"
         launch_audio_send = (
-            f"gst-launch-1.0 alsasrc device=hw:WEBCAM ! audioconvert ! audioresample ! "
-            f"\\\"audio/x-raw,rate=48000,channels=1\\\" ! opusenc bitrate=64000 ! rtpopuspay ! "
+            f"gst-launch-1.0 alsasrc device=plughw:$CARD_ID ! audioconvert ! audioresample ! "
+            f"{audio_caps} ! opusenc bitrate=64000 ! rtpopuspay ! "
             f"udpsink host={self.host_ip} port={MIC_TO_SPEAKER_PORT}"
         )
         
         # Host -> Robot Speakers (Port 3005)
         launch_audio_recv = (
             f"gst-launch-1.0 udpsrc port={SPEAKER_TO_MIC_PORT} ! "
-            f"\\\"application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96\\\" ! "
-            f"rtpopusdepay ! opusdec ! audioconvert ! audioresample ! alsasink device=hw:UACDemoV10"
+            "application/x-rtp,media=audio,clock-rate=48000,encoding-name=OPUS,payload=96 ! "
+            "rtpopusdepay ! opusdec ! audioconvert ! audioresample ! alsasink device=plughw:1"
         )
 
-        # Execute all 3 remote processes in parallel
-        full_launch = f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} \"({launch_video} & {launch_audio_send} & {launch_audio_recv})\""
+        # Trigger the integrated video and audio processes in a parallel background session
+        full_launch = (
+            f"ssh -o ConnectTimeout=3 quadconn@{self.robot_ip} "
+            f"'({find_card}; {launch_video} & {launch_audio_send} & {launch_audio_recv})'"
+        )
         subprocess.Popen(full_launch, shell=True)
 
     def on_ai_results(self, plotted_frame):

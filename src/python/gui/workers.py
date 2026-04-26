@@ -83,6 +83,7 @@ class AudioSendThread(QThread):
         # Toggles the pipeline state between NULL and PLAYING to mute the microphone
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL if is_muted else Gst.State.PLAYING)
+            # "ssh sudo systemctl enable [SERVICE]"
 
     def stop(self):
         # Safely stops the GLib loop and releases the GStreamer hardware

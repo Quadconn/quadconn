@@ -4,6 +4,9 @@ import sys
 import os
 import datetime
 import time
+import matplotlib
+matplotlib.use('Agg') # Force the "Silent" backend
+import matplotlib.pyplot as plt
 
 # PyQt6 UI Components
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QTimer, QPointF
@@ -13,7 +16,7 @@ from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
 
 # Custom Imports from your modular files
 from configurations import *
-from workers import VideoThread, TelemetryReceiver, AudioReceiveThread, AudioSendThread
+from workers import VideoThread, TelemetryReceiver, AudioReceiveThread, AudioSendThread, ControllerThread
 from motor_diagnostics import MOTOR_COUNT
 
 class LidarMapWidget(QWidget):
@@ -34,44 +37,28 @@ class LidarMapWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(event.rect(), QColor(25, 25, 25))
-        painter.setPen(QPen(QColor(60, 60, 60), 1))
-        painter.drawRect(0, 0, self.width()-1, self.height()-1)
+        painter.fillRect(event.rect(), QColor(10, 10, 10)) # Darker background
         
         if self.grid_map is None:
-            # Draw a crosshair if no data is present
-            painter.setPen(QPen(QColor(40, 40, 40), 1, Qt.PenStyle.DashLine))
-            painter.drawLine(self.width()//2, 0, self.width()//2, self.height())
-            painter.drawLine(0, self.height()//2, self.width(), self.height()//2)
             return
 
         rows, cols = self.grid_map.shape
         cell_w = self.width() / cols
         cell_h = self.height() / rows
 
-        # Iterate through the Grid Map and paint the cells
-        for y in range(rows):
-            for x in range(cols):
-                val = self.grid_map[y, x]
+        # Optimization: We only draw pixels that are likely walls (> 0.6 probability)
+        # or clear floors (< 0.4 probability)
+        for y in range(0, rows, 1): # You can increase step to 2 for performance
+            for x in range(0, cols, 1):
+                prob = self.grid_map[y, x]
                 
-                if val == 2: # WALL / OBSTACLE
-                    # If AI sees a human, turn walls red; otherwise, keep them green
+                if prob > 0.6: # It's a wall!
                     color = QColor(255, 0, 0) if self.is_human_detected else QColor(0, 255, 0)
                     painter.fillRect(int(x * cell_w), int(y * cell_h), 
-                                     int(cell_w) + 1, int(cell_h) + 1, color)
-                
-                elif val == 1: # EMPTY / CLEARED SPACE (Floor)
-                    # We use a dark grey to show where the robot has already 'seen'
+                                     int(cell_w)+1, int(cell_h)+1, color)
+                elif prob < 0.4: # It's floor!
                     painter.fillRect(int(x * cell_w), int(y * cell_h), 
-                                     int(cell_w) + 1, int(cell_h) + 1, QColor(40, 40, 40))
-
-        # Draw the Robot Icon
-        center_x = self.width() // 2
-        center_y = self.height() // 2
-        painter.setBrush(QBrush(QColor(255, 255, 255)))
-        painter.setPen(QPen(QColor(200, 200, 200), 1))
-        painter.drawRect(center_x - 5, center_y - 5, 10, 10)
+                                     int(cell_w)+1, int(cell_h)+1, QColor(30, 30, 30))
 
 ## Main User Interface ##
 class QuadconnDashboard(QWidget):
@@ -180,6 +167,12 @@ class QuadconnDashboard(QWidget):
         
         self.last_popup_time = 0
 
+        # Enable Controller Button
+        self.btn_controller = QPushButton("ENABLE GAMEPAD")
+        self.btn_controller.setStyleSheet("background-color: #222; border: 1px solid #555; color: #FFF; padding: 10px;")
+        self.btn_controller.clicked.connect(self.toggle_controller)
+        self.sidebar.addWidget(self.btn_controller)
+
         # Record Function
         self.btn_record = QPushButton("START RECORDING")
         self.btn_record.setStyleSheet("background-color: #222; border: 1px solid #FF0000; color: #FF0000; padding: 10px; font-weight: bold;")
@@ -227,6 +220,10 @@ class QuadconnDashboard(QWidget):
         self.lidar_thread.map_updated.connect(self.lidar_map.update_grid)
         self.lidar_thread.start()
 
+        # Enable remote control
+        self.control_thread = ControllerThread(ROBOT_IP)
+        self.control_thread.status_signal.connect(self.update_controller_ui)
+
         # Local audio threads initialization
         self.audio_recv_thread = AudioReceiveThread(); self.audio_recv_thread.start()
         self.audio_send_thread = AudioSendThread(self.video_thread.robot_ip); self.audio_send_thread.start()
@@ -242,11 +239,14 @@ class QuadconnDashboard(QWidget):
         self.lidar_map.set_human_status(is_human)
 
     def reset_map(self):
-        # Access the slam instance inside the thread and wipe the numpy array
-        self.lidar_thread.slam.map.fill(0)
-        # Force the widget to refresh the screen
-        self.lidar_map.update_grid(self.lidar_thread.slam.map)
-        print("RECON MAP RESET: Memory cleared.")
+        # We need to wipe the occupancy grid for ALL particles
+        for p in self.lidar_thread.pf.particles:
+            p.og.occupancyGridVisited.fill(1)
+            p.og.occupancyGridTotal.fill(2)
+        
+        # Force the widget to clear visually
+        self.lidar_map.update_grid(None)
+        print("RECON MAP RESET: Probabilistic grid cleared.")
 
     def restart_hardware_action(self):
         # Passes manual host IP to video thread and triggers robot
@@ -318,6 +318,22 @@ class QuadconnDashboard(QWidget):
         self.btn_ai.setText(f"PERSON DETECTION: {'ON' if self.video_thread.ai_enabled else 'OFF'}")
         self.btn_ai.setStyleSheet(f"border: 1px solid {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'}; color: {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'};")
 
+    def toggle_controller(self):
+        if not self.control_thread.isRunning():
+            self.control_thread.start()
+            self.btn_controller.setText("GAMEPAD: SEARCHING...")
+        else:
+            self.control_thread.stop()
+            self.btn_controller.setText("ENABLE GAMEPAD")
+            self.btn_controller.setStyleSheet("background-color: #222; color: #FFF;")
+
+    def update_controller_ui(self, status):
+        self.btn_controller.setText(f"GAMEPAD: {status}")
+        if "CONNECTED" in status:
+            self.btn_controller.setStyleSheet("background-color: #004400; color: #00FF00; border: 1px solid #00FF00;")
+        else:
+            self.btn_controller.setStyleSheet("background-color: #440000; color: #FF0000; border: 1px solid #FF0000;")
+
     def update_video(self, pixmap):
         # Renders latest processed frame to UI
         self.video_label.setPixmap(pixmap.scaled(
@@ -325,7 +341,6 @@ class QuadconnDashboard(QWidget):
             Qt.AspectRatioMode.IgnoreAspectRatio, 
             Qt.TransformationMode.SmoothTransformation
         ))
-
         # Check the boolean state from workers.py
         is_human = self.video_thread.is_person_in_view()
         

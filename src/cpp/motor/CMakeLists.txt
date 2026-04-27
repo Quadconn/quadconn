@@ -1,5 +1,6 @@
 find_package(iceoryx2-cxx REQUIRED)
-
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
 # ----------------------------------------
 add_executable(diagnostics_reader)
 
@@ -29,6 +30,7 @@ target_link_libraries(motor_interface
         iceoryx2-cxx::static-lib-cxx
         moteus
         common
+        PkgConfig::SYSTEMD
         
 )
 

@@ -1,0 +1,18 @@
+[Unit]
+Description= activates the control code (sends angular targets)
+# Will run upon notification from motor_interface, and closes it
+# if controls exits early
+After=motor_interface.service
+Requires=motor_interface.service
+BindsTo=motor_interface.service
+[Service]
+Type=simple
+ExecStart=/home/quadconn/quadconn/scripts/bash/run_controls.sh
+WorkingDirectory=/home/quadconn/quadconn/
+Restart=no
+User=quadconn
+
+
+
+
+

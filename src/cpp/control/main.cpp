@@ -23,6 +23,7 @@ int main() {
     BodyJointAngles angles;
     QuadCommand command = {0.0};
 
+    
     interface_notifier.notify_with_custom_event_id(iox2::EventId(
                     iox2::bb::into<size_t>(SystemLogic::StartMotors))).value();
 
@@ -41,6 +42,12 @@ int main() {
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
         interface_notifier.notify_with_custom_event_id(iox2::EventId(
                            iox2::bb::into<size_t>(SystemLogic::QuadControlDone))).value();
+        
+        // TODO: upon conclusion of folding, send signal to end motor controller code
+        if (quad._is_immobile) {
+            interface_notifier.notify_with_custom_event_id(iox2::EventId(
+                           iox2::bb::into<size_t>(SystemLogic::KillMotors))).value();
+        }
     }
 
     return 0;

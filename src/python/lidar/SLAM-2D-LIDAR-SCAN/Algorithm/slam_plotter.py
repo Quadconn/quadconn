@@ -13,26 +13,8 @@ import matplotlib
 import time
 import os
 from datetime import datetime
-import ctypes
-import iceoryx2 as iox2
 
 matplotlib.use("QtAgg")
-
-class QuadCommandMsg(ctypes.Structure):
-    _fields_ = [
-        ("horizontal_velocity_x", ctypes.c_double),
-        ("horizontal_velocity_y", ctypes.c_double),
-        ("yaw_rate",              ctypes.c_double),
-        ("height_rate",           ctypes.c_double),
-        ("is_toggle_mode",        ctypes.c_bool),
-        ("prev_a_press",          ctypes.c_int),
-        ("is_toggle_shutdown",    ctypes.c_bool),
-        ("prev_start_press",      ctypes.c_int),
-    ]
-# Robot state — updated at 100 Hz by an external function (to be written).
-robot_speed = 0.0           # ft/sec, scalar(after m/s -> ft/s conversion)
-robot_orientation = 0.0     # rad
-
 # View modes 
 # View mode (toggled by Ctrl+= / Ctrl+-)
 VIEW_LIVE = 'live'        # robot-centered 100x100 window
@@ -46,16 +28,6 @@ human_present = None # Change this value in function if human was detected
 
 METERS_TO_FEET = 3.28084
 IDLE_EPS = 1e-3
-
-def update_robot_state(speed_mps, orientation_rad):
-    """
-    Called by whoever is publishing robot state at 100 Hz.
-    speed_mps:        forward speed in meters per second
-    orientation_rad:  absolute heading in radians
-    """
-    global robot_speed, robot_orientation
-    robot_speed = speed_mps * METERS_TO_FEET
-    robot_orientation = orientation_rad
 
 # ==============================================================================
 #  All units are FEET throughout (distances, map sizes, poses, grid size).
@@ -75,7 +47,7 @@ def update_robot_state(speed_mps, orientation_rad):
 #     use_udp=True from main() to use the live path.
 # ==============================================================================
 
-UDP_HOST = '127.0.0.1'
+UDP_HOST = '100.97.181.114'
 UDP_PORT = 6000
 PLOT_EVERY = 3
 # Thread-safe queue: the UDP server thread puts scan dicts here,
@@ -113,51 +85,6 @@ def start_udp_server():
     t.start()
     return t
 
-# ---- Receiving velocity x and y values, and yaw rate from main.cpp ----
-def run_command_subscriber():
-    """
-    iceoryx2 subscriber for QuadCommandMsg published by quadcontrol_node.
-    Integrates yaw_rate -> absolute heading and feeds update_robot_state().
-    """
-    node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-
-    service = (node.service_builder(iox2.ServiceName.new("QuadCommand"))
-                   .publish_subscribe(QuadCommandMsg)
-                   .open_or_create())
-
-    subscriber = service.subscriber_builder().create()
-    print("iceoryx2 subscriber listening for QuadCommand")
-
-    last_t = None
-    yaw = 0.0  # integrated heading (rad)
-
-    while True:
-        try:
-            sample = subscriber.receive()
-            if sample is None:
-                time.sleep(0.001)   # nothing yet, don't spin hot
-                continue
-
-            payload = sample.payload()
-            vx       = payload.horizontal_velocity_x   # m/s body forward
-            yaw_rate = payload.yaw_rate                # rad/s
-
-            now = time.monotonic()
-            dt = (now - last_t) if last_t is not None else 0.0
-            last_t = now
-
-            yaw += yaw_rate * dt
-            yaw = math.atan2(math.sin(yaw), math.cos(yaw))   # wrap to [-pi, pi]
-
-            update_robot_state(vx, yaw)
-        except Exception as e:
-            print(f"Command subscriber error: {e}")
-
-
-def start_command_subscriber():
-    t = threading.Thread(target=run_command_subscriber, daemon=True)
-    t.start()
-    return t
 
 # ==============================================================================
 # Particle filter / SLAM (unchanged logic, same as previous version)
@@ -417,9 +344,8 @@ def processSensorData(pf, source, use_udp=False):
         dt = (now - last_scan_time) if last_scan_time is not None else 0.0
         last_scan_time = now
         
-        # Read current robot state (set by update_robot_state at 100 Hz elsewhere).
-        speed = robot_speed                # already in ft/sec
-        orientation = robot_orientation    # rad
+        speed = scan_entry.get('speed', 0.0) * METERS_TO_FEET                # already in ft/sec
+        orientation = scan_entry.get('theta', 0.0)    # rad
 
         isMoving = abs(speed) > IDLE_EPS
 
@@ -590,7 +516,6 @@ def main():
         # Start the UDP server in the background before building the filter,
         # so no packets are dropped while initialisation runs.
         start_udp_server()
-        start_command_subscriber()
         # Block until the very first scan arrives so we have initXY
         print("Waiting for first scan to initialise map...")
         first_scan = scan_queue.get()
@@ -625,7 +550,6 @@ def main():
 
     pf = ParticleFilter(numParticles, ogParameters, smParameters)
     processSensorData(pf, sensorData, use_udp=use_udp)
-
 
 if __name__ == '__main__':
     main()

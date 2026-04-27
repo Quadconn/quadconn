@@ -17,6 +17,8 @@ int main() {
         (make_service<GamepadData>("GamepadData", quadcontrol_node));
     auto interface_notifier = make_notifier
         (make_event("SystemLogic", quadcontrol_node));
+    auto command_publisher = make_publisher<QuadCommand>
+        (make_service<QuadCommand>("QuadCommand", quadcontrol_node));
     /* END: NODE DECLARATION */
 
     QuadControl quad;
@@ -37,6 +39,10 @@ int main() {
         }
 
         quad.set_command(command);
+
+        ipc_send_zerocopy(command_publisher, [&](auto& payload) {
+            payload = command;   // copies all 8 fields
+        });
 
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
         interface_notifier.notify_with_custom_event_id(iox2::EventId(

@@ -518,7 +518,12 @@ def main():
         start_udp_server()
         # Block until the very first scan arrives so we have initXY
         print("Waiting for first scan to initialise map...")
-        first_scan = scan_queue.get()
+        while True:
+            try:
+                first_scan = scan_queue.get()
+                break
+            except queue.Empty():
+                continue
         scan_queue.put(first_scan)   # put it back so the SLAM loop sees it too
 
         numSamplesPerRev = len(first_scan['range'])

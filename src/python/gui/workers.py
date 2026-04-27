@@ -8,6 +8,11 @@ import cv2
 import time
 import threading
 import math
+import os
+import pygame
+import matplotlib.pyplot as plt
+plt.pause = lambda x: None 
+plt.show = lambda: None
 from ctypes import sizeof, memmove, addressof
 from PyQt6.QtCore import QThread, pyqtSignal, QMutex
 from PyQt6.QtGui import QImage, QPixmap
@@ -90,24 +95,39 @@ class AudioSendThread(QThread):
         if self.loop: self.loop.quit()
         if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
 
+from FastSlam import ParticleFilter
+
 class LidarReceiver(QThread):
-    # Catches JSON-serialized LiDAR scans and processes them into a global map
     data_received = pyqtSignal(list)
     map_updated = pyqtSignal(np.ndarray)
-
+    
     def __init__(self):
         super().__init__()
         self.running = True
         self.daemon = True
-        # Create our SLAM engine instance here
-        self.slam = SlamProcessor(map_size_ft=60, resolution_ft=0.2)
+        self.count = 0
+        
+        # SLAM Parameters 
+        unitGridSize = 0.5  
+        lidarFOV = np.pi    
+        lidarMaxRange = 60  
+        numSamplesPerRev = 300 
+        wallThickness = 5 * unitGridSize
+        
+        initXY = {'x': 0, 'y': 0, 'theta': 0}
+        ogParams = [50, 100, initXY, unitGridSize, 
+                    lidarFOV, lidarMaxRange, numSamplesPerRev, wallThickness]
+        smParams = [1.4, 0.25, 2, 0.1, 0.25, 0.3, 0.15, 5]
+        
+        from FastSlam import ParticleFilter
+        self.pf = ParticleFilter(numParticles=5, ogParameters=ogParams, smParameters=smParams)
 
     def run(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(1.0)
         try:
             sock.bind(("0.0.0.0", LIDAR_UDP_PORT))
-            print(f"LiDAR Receiver Active on Port {LIDAR_UDP_PORT}")
+            print(f"SLAM Engine Listening on Port {LIDAR_UDP_PORT}...")
         except Exception as e:
             print(f"LiDAR Socket Error: {e}")
             return
@@ -115,33 +135,42 @@ class LidarReceiver(QThread):
         while self.running:
             try:
                 data, addr = sock.recvfrom(65535)
-                scan_dict = json.loads(data.decode('utf-8'))
+                raw_json = json.loads(data.decode('utf-8'))
+                self.count += 1
+
+                # Corrected mapping to match sf45_collector keys
+                scan_data = {
+                    'x': raw_json.get('x', 0.0),
+                    'y': raw_json.get('y', 0.0),
+                    'theta': raw_json.get('theta', 0.0),
+                    'range': raw_json.get('range', [])
+                }
                 
-                if "range" in scan_dict:
-                    # Grab the 'Pose' from the robot (even if hardcoded for now)
-                    rx = scan_dict.get("x", 0.0)
-                    ry = scan_dict.get("y", 0.0)
-                    rt = scan_dict.get("theta", 0.0)
+                if not scan_data['range']: continue
 
-                    # Feed the SLAM processor
-                    self.slam.update(scan_dict["range"], rx, ry, rt)
+                self.pf.updateParticles(scan_data, self.count)
+                
+                if self.pf.weightUnbalanced():
+                    self.pf.resample()
 
-                    # Emit the raw ranges for the radar view (current behavior)
-                    self.data_received.emit(scan_dict["range"])
-                    
-                    # Emit the full persistent map for the reconnaissance view
-                    self.map_updated.emit(self.slam.map)
+                # Get the map from the best-performing particle
+                best_p = max(self.pf.particles, key=lambda p: p.weight)
+                grid = best_p.og.occupancyGridVisited / best_p.og.occupancyGridTotal
+                
+                # FIX: Used scan_data['range'] instead of the non-existent scan_dict
+                self.map_updated.emit(grid)
+                self.data_received.emit(scan_data['range'])
 
             except socket.timeout:
                 continue
             except Exception as e:
-                print(f"LiDAR Parse Error: {e}")
-        
+                print(f"SLAM Processing Error: {e}")
+
         sock.close()
 
     def stop(self):
         self.running = False
-        self.quit()
+        self.wait()
 
 class SlamProcessor:
     def __init__(self, map_size_ft=100, resolution_ft=0.2):
@@ -528,3 +557,79 @@ class VideoThread(QThread):
         self.stop_recording()
         subprocess.run(f"ssh -o ConnectTimeout=2 quadconn@{self.robot_ip} \"sudo pkill -9 camera_stream; sudo pkill -9 gst-launch-1.0\"", shell=True)
         self.quit()
+
+from gamepad_data import GamepadData
+
+class ControllerThread(QThread):
+    # Sends gamepad inputs to the robot at 100Hz (10ms intervals)
+    status_signal = pyqtSignal(str)
+
+    def __init__(self, robot_ip):
+        super().__init__()
+        self.robot_ip = robot_ip
+        self.running = True
+        self.daemon = True
+        self.port = 3007 
+
+    def run(self):
+        # 1. CRITICAL: Tell SDL to use a "dummy" video driver. 
+        # This prevents the crash between OpenCV and Pygame on Mac.
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+        
+        # 2. Initialize ONLY what we need
+        pygame.display.init() # Needed for event pumping even in dummy mode
+        pygame.joystick.init()
+
+        if pygame.joystick.get_count() == 0:
+            self.status_signal.emit("DISCONNECTED")
+            return
+
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        self.status_signal.emit(f"CONNECTED: {joystick.get_name()}")
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        while self.running:
+            # This is where the magic happens; dummy driver keeps this safe
+            pygame.event.pump()
+
+            # Read Axes (macOS Xbox Mapping)
+            data = GamepadData(
+                lx = joystick.get_axis(0),
+                ly = -joystick.get_axis(1),
+                rx = joystick.get_axis(2),
+                ry = -joystick.get_axis(3),
+                # Mac triggers are usually Axis 4 and 5
+                LT = (joystick.get_axis(4) + 1.0) / 2.0 if joystick.get_numaxes() > 4 else 0.0,
+                RT = (joystick.get_axis(5) + 1.0) / 2.0 if joystick.get_numaxes() > 5 else 0.0,
+                dpad_x = int(joystick.get_hat(0)[0]) if joystick.get_numhats() > 0 else 0,
+                dpad_y = int(joystick.get_hat(0)[1]) if joystick.get_numhats() > 0 else 0,
+                A = joystick.get_button(0),
+                B = joystick.get_button(1),
+                X = joystick.get_button(2),
+                Y = joystick.get_button(3),
+                LB = joystick.get_button(4),
+                RB = joystick.get_button(5),
+                Select = joystick.get_button(6),
+                Start = joystick.get_button(7),
+                L3 = joystick.get_button(8),
+                R3 = joystick.get_button(9),
+                Home = joystick.get_button(10) if joystick.get_numbuttons() > 10 else 0
+            )
+
+            # Ship it to the robot
+            try:
+                sock.sendto(bytes(data), (self.robot_ip, self.port))
+            except Exception:
+                pass
+
+            self.msleep(10) # 100Hz frequency
+
+        sock.close()
+        pygame.quit()
+
+    def stop(self):
+        self.running = False
+        self.wait()

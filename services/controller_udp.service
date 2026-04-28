@@ -1,0 +1,13 @@
+# FINISHED
+[Unit]
+Description=Runs executable responsible for receiving controller inputs via UDP.
+# This ties the lifecycle of this service to the target  
+After=network.target
+
+[Service]
+Type=simple
+# Always use absolute paths for both the interpreter and the script
+ExecStart=/home/quadconn/quadconn/scripts/bash/run_udp_gamepad_receiver.sh
+WorkingDirectory=/home/quadconn/quadconn/
+Restart=on-failure
+User=quadconn

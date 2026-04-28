@@ -7,3 +7,4 @@
 iceoryx2==0.8.1  # Inter-process communication
 evdev            # Controller Code
 pyserial         # interfacing with lidar
+systemd

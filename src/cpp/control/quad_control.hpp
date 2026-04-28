@@ -30,7 +30,8 @@ class QuadControl {
         // Advance the robot control for this time step
         BodyJointAngles step();
 
-
+        // used to communicate w/ motor controller code 
+        bool _is_immobile = false;
     private:
 
         enum class Mode{
@@ -45,6 +46,7 @@ class QuadControl {
         std::array<Eigen::Vector3d, quad::common::LEG_COUNT> _foot_locations;
         BodyJointAngles _joint_angles;
         int _ticks;
+        
         // This is the distance of the foot down from the body of the robot
         // (+) -> above body
         // (0) -> equal to body

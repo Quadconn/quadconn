@@ -44,9 +44,9 @@ namespace quad::config {
 
     // Kinematic Lengths
     inline constexpr double ABDUCTION_OFFSET = 0.10300;
-    inline constexpr double L1               = 0.19625;
+    inline constexpr double L1               = 0.15625;
     inline constexpr double L2               = 0.16631;
-    inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
+    inline constexpr double LEG_FB           = 0.25825;     // Front-back distance from center of body to hip joint axis of rotation
     inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
 
     // Time step to clamp height correction speed

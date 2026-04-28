@@ -35,6 +35,7 @@ int main() {
             auto& data_ref = received_val.value();
 
             command.update(data_ref);
+            
         }
 
         quad.set_command(command);

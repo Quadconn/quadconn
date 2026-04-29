@@ -27,6 +27,16 @@ from gi.repository import Gst, GLib
 from configurations import *
 from motor_diagnostics import MotorDiagnosticsArray
 
+# Robot Command Constants 
+MAX_HORIZONTAL_VELOCITY_X = 0.25
+MAX_HORIZONTAL_VELOCITY_Y = 0.25
+MAX_YAW_RATE = 0.45
+
+# Global command values
+command_horizontal_vel_x = 0 # m/s
+command_horizontal_vel_y = 0 # m/s 
+command_yaw_rate = 0 # rad/s
+
 # Initialize GStreamer core
 Gst.init(None)
 
@@ -102,53 +112,80 @@ from FastSlam import ParticleFilter
 from OccupancyGrid import OccupancyGrid
 
 class LidarSLAMWorker(QThread):
-    # Updated Signal: Expects the Map, and the robot's X, Y, and Theta
-    map_updated = pyqtSignal(np.ndarray, float, float, float)
+    # Signals the GUI: Map (numpy array), X, Y, Theta, and Human Detected (bool)
+    map_updated = pyqtSignal(np.ndarray, float, float, float, bool)
 
     def __init__(self):
         super().__init__()
         self.running = True
-        self.port = 6000
-        # Current motion state from GUI (optional fallback)
-        self.current_speed = 0.0
-        self.current_orientation = 0.0
-        # Initialize SLAM parameters from your partner's new plotter
+        # NOTE: Ensure sf45_collector.py is also set to port 6000!
+        self.port = 6000 
+        
+        # --- THE MAILBOX (Shared State for Robot "Truth") ---
+        self._state_lock = threading.Lock()
+        self._robot_speed_fps = 0.0     
+        self._robot_theta_rad = 0.0     
+        self._human_present = False      
+        
         self.init_params()
 
     def init_params(self):
-    # --- UPDATED FOR HANDHELD MAPPING ---
-    # 1. unitGridSize: Try 0.2 (approx 2.4 inches) for higher resolution
+        # High-res settings for X1 Checkpoint
         self.og_params = [150, 150, None, 0.2, math.radians(120), 164.042, 300, 1.0]
-    
-    # 2. scanMatchSearchRadius: Increase to 3.0 or 4.0 feet
-    # This allows the SLAM to "catch" you if you walk at a normal human pace.
-    # 3. scanSigmaInNumGrid: Increase to 3 or 4 to make the matching "sticker."
         self.sm_params = [3.0, 0.1, 4, 0.3, 0.5, 0.2, 0.15, 5]
-    
-    # 4. Particles: Bump this to 15 or 20. 
-    # Your MacBook Pro can handle it, and more particles = better "guesses" of your position.
+        self.num_particles = 15
         self.pf = None
 
+    def update_robot_state(self, speed_mps, theta_rad, human_present):
+        """
+        ONE PLACE UPDATE: Called by main.py every time telemetry or AI updates.
+        """
+        with self._state_lock:
+            self._robot_speed_fps = float(speed_mps)
+            self._robot_theta_rad = float(theta_rad)
+            self._human_present = bool(human_present)
+
     def run(self):
-        # UDP Setup
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(('', self.port))
         sock.settimeout(1.0)
         
         count = 0
         last_scan_time = None
+        METERS_TO_FEET = 3.28084
+        IDLE_EPS = 1e-3
+
+        global command_horizontal_vel_x
+        global command_horizontal_vel_y
+        global command_yaw_rate
         
         print(f"SLAM Engine: Listening on Port {self.port}...")
 
         while self.running:
             try:
                 data, _ = sock.recvfrom(65507)
+                # The new collector sends JSON: {"range": [...]}
                 scan_entry = json.loads(data.decode('utf-8'))
-                
+
+                # --- STEP A: SNAPSHOT THE MAILBOX ---
+                # NOTE: Maybe not needed?
+                with self._state_lock:
+                    current_speed_fps = self._robot_speed_fps
+                    current_theta_rad = self._robot_theta_rad
+                    human_is_present = self._human_present
+
+                self._robot_speed_fps = np.sqrt(command_horizontal_vel_x**2 + command_horizontal_vel_y**2) * METERS_TO_FEET
+                self._robot_theta_rad = command_yaw_rate * (180.0 / np.pi)
+
                 # Initialization on first packet
                 if self.pf is None:
-                    self.og_params[2] = scan_entry # Set the initXY from first scan
-                    self.pf = ParticleFilter(8, self.og_params, self.sm_params)
+                    # Provide starting pose if collector doesn't send it
+                    scan_entry.setdefault('x', 0.0)
+                    scan_entry.setdefault('y', 0.0)
+                    scan_entry.setdefault('theta', current_theta_rad)
+                    
+                    self.og_params[2] = scan_entry 
+                    self.pf = ParticleFilter(self.num_particles, self.og_params, self.sm_params)
                     print("SLAM: Particle Filter Initialized.")
 
                 count += 1
@@ -156,21 +193,21 @@ class LidarSLAMWorker(QThread):
                 dt = (now - last_scan_time) if last_scan_time is not None else 0.0
                 last_scan_time = now
 
-                # Extract motion from scan_entry (provided by sf45_collector.py)
-                speed = scan_entry.get('speed', 0.0) 
-                orientation = scan_entry.get('theta', 0.0)
-                
-                # Create motion dict if robot is actually moving
-                motion = {'speed': speed, 'orientation': orientation, 'dt': dt} if abs(speed) > 1e-3 else None
+                # --- STEP B: APPLY MOTION ---
+                # Provide motion data to the Particle Filter if robot is moving
+                isMoving = abs(speed_fps) > IDLE_EPS
+                motion = {
+                    'speed': speed_fps, 
+                    'orientation': current_theta_rad, 
+                    'dt': dt
+                } if isMoving else None
 
-                # Step 1: Update Particle Filter
                 self.pf.updateParticles(scan_entry, count, motion)
                 
-                # Step 2: Check for Resampling
                 if self.pf.weightUnbalanced():
                     self.pf.resample()
 
-                # --- Step 3: Every 3 frames, send the SLICED map to GUI ---
+                # --- STEP C: THE SLICER (Every 3 frames) ---
                 if count % 3 == 0:
                     best = max(self.pf.particles, key=lambda p: p.weight)
                     curr_x = best.xTrajectory[-1]
@@ -178,42 +215,27 @@ class LidarSLAMWorker(QThread):
                     curr_theta = best.prevMatchedReading['theta']
 
                     og = best.og
-                    
-                    # --- THE FIX: SLICE THE MAP AROUND THE ROBOT ---
-                    # We define a "window" of 50ft around the robot
                     view_half = 50.0 
-                    x_range = [curr_x - view_half, curr_x + view_half]
-                    y_range = [curr_y - view_half, curr_y + view_half]
+                    x_r = [max(curr_x - view_half, og.mapXLim[0]), min(curr_x + view_half, og.mapXLim[1])]
+                    y_r = [max(curr_y - view_half, og.mapYLim[0]), min(curr_y + view_half, og.mapYLim[1])]
 
-                    # Clip the window so we don't go outside the grid bounds
-                    x_range = [max(x_range[0], og.mapXLim[0]), min(x_range[1], og.mapXLim[1])]
-                    y_range = [max(y_range[0], og.mapYLim[0]), min(y_range[1], og.mapYLim[1])]
-
-                    # Convert those real-world feet to grid indices
-                    x_idx, y_idx = og.convertRealXYToMapIdx(x_range, y_range)
-
-                    # Extract just that piece of the map
+                    x_idx, y_idx = og.convertRealXYToMapIdx(x_r, y_r)
                     visited = og.occupancyGridVisited[y_idx[0]:y_idx[1], x_idx[0]:x_idx[1]]
                     total   = og.occupancyGridTotal  [y_idx[0]:y_idx[1], x_idx[0]:x_idx[1]]
 
                     with np.errstate(divide='ignore', invalid='ignore'):
                         ratio = np.where(total > 0, visited / total, 0.5)
                     
-                    # This ogMap is now "Zoomed In" on the robot!
                     ogMap = np.flipud(1.0 - ratio)
 
-                    # Emit the zoomed map and current position
-                    self.map_updated.emit(ogMap, curr_x, curr_y, curr_theta)
+                    # Emit everything back to main.py
+                    # We add human_is_present so the GUI can draw markers!
+                    self.map_updated.emit(ogMap, curr_x, curr_y, curr_theta, human_is_present)
 
             except socket.timeout:
                 continue
             except Exception as e:
                 print(f"SLAM Error: {e}")
-
-    def update_motion(self, speed, orientation):
-        """Update the motion model based on stick inputs from the GUI."""
-        self.current_speed = speed
-        self.current_orientation = orientation
 
     def stop(self):
         self.running = False
@@ -591,6 +613,9 @@ class ControllerThread(QThread):
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+        global command_horizontal_vel_x
+        global command_horizontal_vel_y
+        global command_yaw_rate
         while self.running:
             pygame.event.pump()
 
@@ -598,11 +623,16 @@ class ControllerThread(QThread):
             btn = lambda idx: self.joystick.get_button(idx) if idx < self.joystick.get_numbuttons() else 0
 
             # Stick Mapping
-            lx = self._deadzone(self.joystick.get_axis(0))
-            ly = self._deadzone(self.joystick.get_axis(1))
-            rx = self._deadzone(self.joystick.get_axis(2))
-            ry = self._deadzone(self.joystick.get_axis(3))
-            
+            lx = self._deadzone(-self.joystick.get_axis(0))
+            ly = self._deadzone(-self.joystick.get_axis(1))
+            rx = self._deadzone(-self.joystick.get_axis(2))
+            ry = self._deadzone(-self.joystick.get_axis(3))
+
+            command_horizontal_vel_x = ly * MAX_HORIZONTAL_VELOCITY_X
+            command_horizontal_vel_y = lx * MAX_HORIZONTAL_VELOCITY_Y
+            command_yaw_rate = rx * MAX_YAW_RATE
+
+
             # Trigger Mapping (0.0 to 1.0)
             lt_raw = self.joystick.get_axis(4) if self.joystick.get_numaxes() > 4 else -1.0
             rt_raw = self.joystick.get_axis(5) if self.joystick.get_numaxes() > 5 else -1.0

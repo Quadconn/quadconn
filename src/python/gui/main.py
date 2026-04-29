@@ -24,60 +24,71 @@ class LidarMapWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.map_image = None
-        self.robot_pos = (0, 0, 0)  # (x, y, theta) in feet
-        self.map_limits = [-50, 50, -50, 50]  # [minX, maxX, minY, maxY]
-
-        # 1. Set the fixed size so the layout doesn't squash it
-        self.setFixedSize(350, 350) 
+        self.robot_pos = (0, 0, 0)  
+        self.map_limits = [-50, 50, -50, 50]  
         
-        # 2. Style it
+        # --- NEW: Store persistent human detection markers ---
+        self.human_markers = [] # List of (x, y) tuples in feet
+
+        self.setFixedSize(350, 350) 
         self.setStyleSheet("border: 1px solid #444; background-color: #111;")
-
-        # 3. FIX: Move the blank initialization HERE so it runs on startup
-        # This ensures the map isn't black while waiting for the first LiDAR packet
+        
         blank = np.full((201, 201), 0.5)
-        self.update_map(blank, 0, 0, 0)
+        self.update_map(blank, 0, 0, 0, False) # Added 5th arg
 
-    def update_map(self, array, x, y, theta):
-        # 1. Convert probability array (0-1) to grayscale pixels (0-255)
+    def update_map(self, array, x, y, theta, human_detected):
+        # 1. Convert probability array to grayscale
         gray_data = (array * 255).astype(np.uint8)
         h, w = gray_data.shape
-        
-        # 2. Convert NumPy to QImage
         self.map_image = QImage(gray_data.data, w, h, w, QImage.Format.Format_Grayscale8)
-        
-        # 3. Store the robot's current estimated location
         self.robot_pos = (x, y, theta)
         
-        # 4. Trigger the paintEvent
+        # --- NEW: Logic to drop a marker if a human is seen ---
+        if human_detected:
+            # Only add a marker if we aren't already near an existing one (within 15ft)
+            nearby = any(max(abs(mx - x), abs(my - y)) <= 15.0 for mx, my in self.human_markers)
+            if not nearby:
+                self.human_markers.append((x, y))
+                print(f"MAP: Human Marker dropped at X:{x:.1f} Y:{y:.1f}")
+
         self.update()
 
     def paintEvent(self, event):
-        # If map_image is None, it won't draw anything (This is why it was black!)
-        if not self.map_image:
-            return
-
+        if not self.map_image: return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawImage(self.contentsRect(), self.map_image)
 
-        # Draw the Map
-        target_rect = self.contentsRect()
-        painter.drawImage(target_rect, self.map_image)
+        # --- FIX: Calculate limits based on the SLICER (50ft window) ---
+        # Since the worker sends a 50ft view centered on the robot:
+        view_half = 50.0
+        min_x = self.robot_pos[0] - view_half
+        max_x = self.robot_pos[0] + view_half
+        min_y = self.robot_pos[1] - view_half
+        max_y = self.robot_pos[1] + view_half
 
-        # --- THE RED DOT (Robot Marker) ---
-        min_x, max_x, min_y, max_y = self.map_limits
+        # --- Draw Green Human Markers ---
+        painter.setBrush(QColor(0, 255, 0))
+        painter.setPen(QPen(Qt.GlobalColor.black, 1))
+        for mx, my in self.human_markers:
+            # Only draw if the marker is actually within the current 50ft window
+            if min_x <= mx <= max_x and min_y <= my <= max_y:
+                px = (mx - min_x) / (max_x - min_x) * self.width()
+                py = (1.0 - (my - min_y) / (max_y - min_y)) * self.height()
+                painter.drawRect(int(px) - 4, int(py) - 4, 8, 8)
+
+        # --- Draw Robot Marker (Red Dot) ---
+        # The robot is ALWAYS at the center of the sliced map (0.5, 0.5)
+        px = self.width() / 2
+        py = self.height() / 2
         
-        # Calculate pixel coordinates
-        px = (self.robot_pos[0] - min_x) / (max_x - min_x) * self.width()
-        py = (1.0 - (self.robot_pos[1] - min_y) / (max_y - min_y)) * self.height()
-
-        # Draw Robot Marker
         painter.setBrush(QColor(255, 0, 0))
         painter.setPen(QPen(Qt.GlobalColor.white, 2))
         painter.drawEllipse(int(px) - 5, int(py) - 5, 10, 10)
 
         # Draw Heading Line
         line_len = 15
+        # Note: Added - to theta for standard screen coordinate rotation
         head_x = px + line_len * np.cos(self.robot_pos[2])
         head_y = py - line_len * np.sin(self.robot_pos[2])
         painter.drawLine(int(px), int(py), int(head_x), int(head_y))
@@ -451,13 +462,19 @@ class QuadconnDashboard(QWidget):
         # Check the boolean state from workers.py
         is_human = self.video_thread.is_person_in_view()
         
-        # Update the proximity box
+        # Update the proximity UI box
         if is_human:
             self.lbl_ai_proximity.setText("HUMAN DETECTED")
             self.lbl_ai_proximity.setStyleSheet("background-color: #770000; border: 1px solid #FF0000; color: #FFFFFF; padding: 5px; font-weight: bold;")
         else:
             self.lbl_ai_proximity.setText("NO DETECTION")
             self.lbl_ai_proximity.setStyleSheet("background-color: #002200; border: 1px solid #00FF00; color: #00FF00; padding: 5px; font-weight: bold;")
+
+        # --- ADD THIS: Push human detection to SLAM immediately ---
+        if hasattr(self, 'lidar_thread'):
+            # We don't have new speed/heading here, so we just pass 0.0 or last known
+            # This ensures the SLAM engine sees the 'True' flag from YOLO immediately
+            self.lidar_thread.update_robot_state(0.0, 0.0, is_human)
 
     def update_connection_ui(self, is_online):
         # Updates status indicator based on telemetry reception
@@ -521,14 +538,28 @@ class QuadconnDashboard(QWidget):
             self.lbl_alert_banner.setStyleSheet("background-color: #002200; color: #00FF00; font-weight: bold; border: 1px solid #00FF00;")
             self.lbl_volt.setStyleSheet("color: #FFFFFF;")
 
-        # 1. Extract the speed and heading from your telemetry data object.
-        # Replace 'forward_velocity' and 'yaw' with the actual names used in your C++ struct.
-        speed = getattr(data, 'forward_velocity', 0.0)
+        # --- ONE-PLACE ROBOT STATE UPDATE (SPEED, HEADING, HUMAN) ---
+        
+        # 1. Extract the speed components and calculate Magnitude (Hypotenuse)
+        # Using getattr to safely pull vx and vy if they exist in your telemetry struct
+        vx = getattr(data, 'vx_mps', 0.0) 
+        vy = getattr(data, 'vy_mps', 0.0)
+        magnitude_speed = np.sqrt(vx**2 + vy**2)
+        
+        # 2. Extract Heading (Yaw)
         heading = getattr(data, 'yaw', 0.0)
 
-        # 2. Feed it into the SLAM engine to help it predict the robot's next position.
+        # 3. Get latest Human Detection status from the video thread
+        is_human = self.video_thread.is_person_in_view()
+
+        # 4. Feed it into the SLAM engine mailbox to help it predict the robot's next position.
+        # This now passes speed, heading, AND human status in one single call.
         if hasattr(self, 'lidar_thread') and self.lidar_thread is not None:
-            self.lidar_thread.update_motion(speed, heading)
+            self.lidar_thread.update_robot_state(
+                speed_mps=magnitude_speed, 
+                theta_rad=heading, 
+                human_present=is_human
+            )
 
     def closeEvent(self, event):
         # Ensures local and remote processes are killed when closing the window

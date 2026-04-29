@@ -110,10 +110,10 @@ namespace quad::config {
 
     // Default/Idle foot locations relative to center of body
     inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> DEFAULT_STANCE {
-        Eigen::Vector3d{ LEG_FB - 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{ LEG_FB - 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
-        Eigen::Vector3d{-LEG_FB + 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{-LEG_FB + 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
 
     inline constexpr BodyJointAngles STARTUP_ANGLES = {{

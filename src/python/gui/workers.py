@@ -11,6 +11,8 @@ import math
 import os
 import pygame
 import matplotlib.pyplot as plt
+import ctypes
+import iceoryx2 as iox2
 plt.pause = lambda x: None 
 plt.show = lambda: None
 from ctypes import sizeof, memmove, addressof
@@ -306,7 +308,17 @@ class InferenceWorker(QThread):
         self.mutex = QMutex()
         self.daemon = True
         self.human_detected = False
-    
+
+        # iceoryx2 publisher for human detection status
+        self.iox_node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
+        self.iox_service = (
+            self.iox_node
+            .service_builder(iox2.ServiceName.new("HumanDetection"))
+            .publish_subscribe(ctypes.c_bool)
+            .open_or_create()
+        )
+        self.iox_publisher = self.iox_service.publisher_builder().create()
+
     def get_human_status(self):
         return self.human_detected
 
@@ -346,7 +358,11 @@ class InferenceWorker(QThread):
                 if is_person_present != self.human_detected:
                     self.human_detected = is_person_present
                     self.human_status_signal.emit(self.human_detected)
-
+                    # Publishing value to Lidar Plotter if human is detected
+                    sample = self.iox_publisher.loan_uninit()
+                    sample = sample.write_payload(ctypes.c_bool(is_person_present))
+                    sample.send()
+                    
                 if is_person_present:
                     self.results_ready.emit(results[0].plot())
                 else:

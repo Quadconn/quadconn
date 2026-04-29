@@ -42,4 +42,4 @@ SCAN_FOV_DEG = 120.0
 
 # Robot Hardware Info
 ROBOT_IP = "100.81.189.79"
-ROBOT_EXEC = "/home/quadconn/gui_branch/quadconn/build/camera_stream"
+ROBOT_EXEC = "/home/quadconn/quadconn/scripts/bash/run_camera.sh"

@@ -95,160 +95,127 @@ class AudioSendThread(QThread):
         if self.loop: self.loop.quit()
         if self.pipeline: self.pipeline.set_state(Gst.State.NULL)
 
+# Import your partner's engine files
 from FastSlam import ParticleFilter
+from OccupancyGrid import OccupancyGrid
 
-class LidarReceiver(QThread):
-    data_received = pyqtSignal(list)
-    map_updated = pyqtSignal(np.ndarray)
-    
+class LidarSLAMWorker(QThread):
+    # Updated Signal: Expects the Map, and the robot's X, Y, and Theta
+    map_updated = pyqtSignal(np.ndarray, float, float, float)
+
     def __init__(self):
         super().__init__()
         self.running = True
-        self.daemon = True
-        self.count = 0
-        
-        # SLAM Parameters 
-        unitGridSize = 0.5  
-        lidarFOV = np.pi    
-        lidarMaxRange = 60  
-        numSamplesPerRev = 300 
-        wallThickness = 5 * unitGridSize
-        
-        initXY = {'x': 0, 'y': 0, 'theta': 0}
-        ogParams = [50, 100, initXY, unitGridSize, 
-                    lidarFOV, lidarMaxRange, numSamplesPerRev, wallThickness]
-        smParams = [1.4, 0.25, 2, 0.1, 0.25, 0.3, 0.15, 5]
-        
-        from FastSlam import ParticleFilter
-        self.pf = ParticleFilter(numParticles=5, ogParameters=ogParams, smParameters=smParams)
+        self.port = 6000
+        # Current motion state from GUI (optional fallback)
+        self.current_speed = 0.0
+        self.current_orientation = 0.0
+        # Initialize SLAM parameters from your partner's new plotter
+        self.init_params()
+
+    def init_params(self):
+    # --- UPDATED FOR HANDHELD MAPPING ---
+    # 1. unitGridSize: Try 0.2 (approx 2.4 inches) for higher resolution
+        self.og_params = [150, 150, None, 0.2, math.radians(120), 164.042, 300, 1.0]
+    
+    # 2. scanMatchSearchRadius: Increase to 3.0 or 4.0 feet
+    # This allows the SLAM to "catch" you if you walk at a normal human pace.
+    # 3. scanSigmaInNumGrid: Increase to 3 or 4 to make the matching "sticker."
+        self.sm_params = [3.0, 0.1, 4, 0.3, 0.5, 0.2, 0.15, 5]
+    
+    # 4. Particles: Bump this to 15 or 20. 
+    # Your MacBook Pro can handle it, and more particles = better "guesses" of your position.
+        self.pf = None
 
     def run(self):
+        # UDP Setup
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('', self.port))
         sock.settimeout(1.0)
-        try:
-            sock.bind(("0.0.0.0", LIDAR_UDP_PORT))
-            print(f"SLAM Engine Listening on Port {LIDAR_UDP_PORT}...")
-        except Exception as e:
-            print(f"LiDAR Socket Error: {e}")
-            return
+        
+        count = 0
+        last_scan_time = None
+        
+        print(f"SLAM Engine: Listening on Port {self.port}...")
 
         while self.running:
             try:
-                data, addr = sock.recvfrom(65535)
-                raw_json = json.loads(data.decode('utf-8'))
-                self.count += 1
-
-                # Corrected mapping to match sf45_collector keys
-                scan_data = {
-                    'x': raw_json.get('x', 0.0),
-                    'y': raw_json.get('y', 0.0),
-                    'theta': raw_json.get('theta', 0.0),
-                    'range': raw_json.get('range', [])
-                }
+                data, _ = sock.recvfrom(65507)
+                scan_entry = json.loads(data.decode('utf-8'))
                 
-                if not scan_data['range']: continue
+                # Initialization on first packet
+                if self.pf is None:
+                    self.og_params[2] = scan_entry # Set the initXY from first scan
+                    self.pf = ParticleFilter(8, self.og_params, self.sm_params)
+                    print("SLAM: Particle Filter Initialized.")
 
-                self.pf.updateParticles(scan_data, self.count)
+                count += 1
+                now = time.monotonic()
+                dt = (now - last_scan_time) if last_scan_time is not None else 0.0
+                last_scan_time = now
+
+                # Extract motion from scan_entry (provided by sf45_collector.py)
+                speed = scan_entry.get('speed', 0.0) 
+                orientation = scan_entry.get('theta', 0.0)
                 
+                # Create motion dict if robot is actually moving
+                motion = {'speed': speed, 'orientation': orientation, 'dt': dt} if abs(speed) > 1e-3 else None
+
+                # Step 1: Update Particle Filter
+                self.pf.updateParticles(scan_entry, count, motion)
+                
+                # Step 2: Check for Resampling
                 if self.pf.weightUnbalanced():
                     self.pf.resample()
 
-                # Get the map from the best-performing particle
-                best_p = max(self.pf.particles, key=lambda p: p.weight)
-                grid = best_p.og.occupancyGridVisited / best_p.og.occupancyGridTotal
-                
-                # FIX: Used scan_data['range'] instead of the non-existent scan_dict
-                self.map_updated.emit(grid)
-                self.data_received.emit(scan_data['range'])
+                # --- Step 3: Every 3 frames, send the SLICED map to GUI ---
+                if count % 3 == 0:
+                    best = max(self.pf.particles, key=lambda p: p.weight)
+                    curr_x = best.xTrajectory[-1]
+                    curr_y = best.yTrajectory[-1]
+                    curr_theta = best.prevMatchedReading['theta']
+
+                    og = best.og
+                    
+                    # --- THE FIX: SLICE THE MAP AROUND THE ROBOT ---
+                    # We define a "window" of 50ft around the robot
+                    view_half = 50.0 
+                    x_range = [curr_x - view_half, curr_x + view_half]
+                    y_range = [curr_y - view_half, curr_y + view_half]
+
+                    # Clip the window so we don't go outside the grid bounds
+                    x_range = [max(x_range[0], og.mapXLim[0]), min(x_range[1], og.mapXLim[1])]
+                    y_range = [max(y_range[0], og.mapYLim[0]), min(y_range[1], og.mapYLim[1])]
+
+                    # Convert those real-world feet to grid indices
+                    x_idx, y_idx = og.convertRealXYToMapIdx(x_range, y_range)
+
+                    # Extract just that piece of the map
+                    visited = og.occupancyGridVisited[y_idx[0]:y_idx[1], x_idx[0]:x_idx[1]]
+                    total   = og.occupancyGridTotal  [y_idx[0]:y_idx[1], x_idx[0]:x_idx[1]]
+
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        ratio = np.where(total > 0, visited / total, 0.5)
+                    
+                    # This ogMap is now "Zoomed In" on the robot!
+                    ogMap = np.flipud(1.0 - ratio)
+
+                    # Emit the zoomed map and current position
+                    self.map_updated.emit(ogMap, curr_x, curr_y, curr_theta)
 
             except socket.timeout:
                 continue
             except Exception as e:
-                print(f"SLAM Processing Error: {e}")
+                print(f"SLAM Error: {e}")
 
-        sock.close()
+    def update_motion(self, speed, orientation):
+        """Update the motion model based on stick inputs from the GUI."""
+        self.current_speed = speed
+        self.current_orientation = orientation
 
     def stop(self):
         self.running = False
         self.wait()
-
-class SlamProcessor:
-    def __init__(self, map_size_ft=100, resolution_ft=0.2):
-        self.res = resolution_ft
-        self.grid_size = int(map_size_ft / resolution_ft)
-        self.map = np.zeros((self.grid_size, self.grid_size), dtype=np.int8) 
-        self.offset = self.grid_size // 2
-
-        # Scan Matching State
-        self.prev_scan = None
-        self.robot_theta = 0.0  # Our internal "guessed" heading
-        self.deg_per_index = 120.0 / 300.0 # 0.4 degrees per sample
-
-    def estimate_rotation(self, current_scan):
-        """Finds the best-fit rotation shift between current and previous scan."""
-        if self.prev_scan is None:
-            self.prev_scan = current_scan
-            return 0.0
-
-        best_shift = 0
-        min_error = float('inf')
-        
-        # We search +/- 25 indices (approx +/- 10 degrees) for the best fit
-        for shift in range(-25, 26):
-            # Roll the current scan to simulate rotation
-            rolled_scan = np.roll(current_scan, shift)
-            
-            # Calculate Absolute Error (Ignoring zeros/infinity)
-            error = np.sum(np.abs(rolled_scan - self.prev_scan))
-            
-            if error < min_error:
-                min_error = error
-                best_shift = shift
-
-        # Update persistent scan for the next comparison
-        self.prev_scan = current_scan
-        
-        # Convert index shift to radians
-        delta_theta = math.radians(best_shift * self.deg_per_index)
-        return delta_theta
-
-    def update(self, scan_data, robot_x, robot_y, robot_theta_unused):
-        # Convert input list to numpy array for fast math
-        current_scan_np = np.array(scan_data)
-
-        # Update internal heading guess
-        delta_t = self.estimate_rotation(current_scan_np)
-        self.robot_theta += delta_t
-
-        # Perform Raycasting using guessed theta
-        for i, r in enumerate(scan_data):
-            # Filtering out-of-range or noise
-            if r >= 160.0 or r <= 0.5: continue 
-
-            # Calculate the angle for this specific laser beam
-            scan_angle = math.radians((i * self.deg_per_index) - 60)
-            total_angle = self.robot_theta + scan_angle
-
-            # Target wall grid coordinates
-            gx = int((robot_x + r * math.sin(total_angle)) / self.res) + self.offset
-            gy = int((robot_y - r * math.cos(total_angle)) / self.res) + self.offset
-
-            # Raycasting
-            num_steps = int(r / self.res)
-            for step in range(num_steps):
-                dist = step * self.res
-                step_x = int((robot_x + dist * math.sin(total_angle)) / self.res) + self.offset
-                step_y = int((robot_y - dist * math.cos(total_angle)) / self.res) + self.offset
-                
-                if 0 <= step_x < self.grid_size and 0 <= step_y < self.grid_size:
-                    if self.map[step_y, step_x] != 2:
-                        self.map[step_y, step_x] = 1 
-
-            # Mark the wall
-            if 0 <= gx < self.grid_size and 0 <= gy < self.grid_size:
-                self.map[gy, gx] = 2
-
-        print(f"Internal Heading: {math.degrees(self.robot_theta):.1f}° | Wall Points: {np.count_nonzero(self.map == 2)}")
 
 class TelemetryReceiver(QThread):
     # Handles background UDP reception of motor diagnostic data on Port 808 by directly mapping raw network bytes into C-style memory structures
@@ -561,8 +528,8 @@ class VideoThread(QThread):
 from gamepad_data import GamepadData
 
 class ControllerThread(QThread):
-    # Sends gamepad inputs to the robot at 100Hz (10ms intervals)
     status_signal = pyqtSignal(str)
+    controller_state = pyqtSignal(dict)
 
     def __init__(self, robot_ip):
         super().__init__()
@@ -570,65 +537,117 @@ class ControllerThread(QThread):
         self.running = True
         self.daemon = True
         self.port = 3007 
+        self.joystick = None
+
+    def _deadzone(self, joystick_input):
+        # Applies the requested 0.05 threshold to prevent "stick drift"
+        return 0.0 if abs(joystick_input) < 0.05 else joystick_input
 
     def run(self):
-        # 1. CRITICAL: Tell SDL to use a "dummy" video driver. 
-        # This prevents the crash between OpenCV and Pygame on Mac.
+        # 1. Environment setup MUST happen before any pygame.init calls
         os.environ["SDL_VIDEODRIVER"] = "dummy"
-        os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+        os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
         
-        # 2. Initialize ONLY what we need
-        pygame.display.init() # Needed for event pumping even in dummy mode
-        pygame.joystick.init()
+        try:
+            # 2. Initialize the display FIRST (using the dummy driver)
+            # This fixes the "video system not initialized" error
+            pygame.display.init() 
+            pygame.joystick.init()
+        except Exception as e:
+            print(f"SDL Subsystem Error: {e}")
+            self.status_signal.emit("ERROR")
+            return
 
         if pygame.joystick.get_count() == 0:
             self.status_signal.emit("DISCONNECTED")
+            # Cleanup display before exiting
+            pygame.display.quit()
             return
 
-        joystick = pygame.joystick.Joystick(0)
-        joystick.init()
-        self.status_signal.emit(f"CONNECTED: {joystick.get_name()}")
+        try:
+            self.joystick = pygame.joystick.Joystick(0)
+            self.joystick.init()
+            self.status_signal.emit(f"CONNECTED: {self.joystick.get_name()}")
+        except Exception as e:
+            self.status_signal.emit("ERROR")
+            print(f"Joystick Bind Error: {e}")
+            return
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         while self.running:
-            # This is where the magic happens; dummy driver keeps this safe
             pygame.event.pump()
 
-            # Read Axes (macOS Xbox Mapping)
+            # Helper for buttons based on Flydigi APEX 4 mapping
+            btn = lambda idx: self.joystick.get_button(idx) if idx < self.joystick.get_numbuttons() else 0
+
+            # Stick Mapping
+            lx = self._deadzone(self.joystick.get_axis(0))
+            ly = self._deadzone(self.joystick.get_axis(1))
+            rx = self._deadzone(self.joystick.get_axis(2))
+            ry = self._deadzone(self.joystick.get_axis(3))
+            
+            # Trigger Mapping (0.0 to 1.0)
+            lt_raw = self.joystick.get_axis(4) if self.joystick.get_numaxes() > 4 else -1.0
+            rt_raw = self.joystick.get_axis(5) if self.joystick.get_numaxes() > 5 else -1.0
+            l2 = (lt_raw + 1.0) / 2.0
+            r2 = (rt_raw + 1.0) / 2.0
+
+            # D-Pad Mapping (Button Indices: 11-14)
+            d_x, d_y = 0, 0
+            if btn(11): d_y = 1   # Physical Up
+            elif btn(12): d_y = -1 # Physical Down
+            
+            if btn(13): d_x = -1  # Physical Left
+            elif btn(14): d_x = 1   # Physical Right
+
+            # Gamepad Construction
+            # All indices aligned with your Flydigi APEX 4 feedback
             data = GamepadData(
-                lx = joystick.get_axis(0),
-                ly = -joystick.get_axis(1),
-                rx = joystick.get_axis(2),
-                ry = -joystick.get_axis(3),
-                # Mac triggers are usually Axis 4 and 5
-                LT = (joystick.get_axis(4) + 1.0) / 2.0 if joystick.get_numaxes() > 4 else 0.0,
-                RT = (joystick.get_axis(5) + 1.0) / 2.0 if joystick.get_numaxes() > 5 else 0.0,
-                dpad_x = int(joystick.get_hat(0)[0]) if joystick.get_numhats() > 0 else 0,
-                dpad_y = int(joystick.get_hat(0)[1]) if joystick.get_numhats() > 0 else 0,
-                A = joystick.get_button(0),
-                B = joystick.get_button(1),
-                X = joystick.get_button(2),
-                Y = joystick.get_button(3),
-                LB = joystick.get_button(4),
-                RB = joystick.get_button(5),
-                Select = joystick.get_button(6),
-                Start = joystick.get_button(7),
-                L3 = joystick.get_button(8),
-                R3 = joystick.get_button(9),
-                Home = joystick.get_button(10) if joystick.get_numbuttons() > 10 else 0
+                dpad_x = d_x,
+                dpad_y = d_y,
+                A = btn(0), 
+                B = btn(1), 
+                X = btn(2), 
+                Y = btn(3),
+                LB = btn(9),      
+                RB = btn(10),     
+                Select = btn(4),  
+                Start = btn(6),   
+                L3 = btn(7),      
+                R3 = btn(8),      
+                Home = btn(5),    
+                lx = lx, ly = ly, rx = rx, ry = ry, LT = l2, RT = r2
             )
 
-            # Ship it to the robot
+            # 1. Put EVERYTHING in the dictionary
+            state = {
+                "A": btn(0), "B": btn(1), "X": btn(2), "Y": btn(3),
+                "LB": btn(9), "RB": btn(10), "Select": btn(4), "Start": btn(6),
+                "L3": btn(7), "R3": btn(8), "Home": btn(5),
+                "UP": btn(11), "DOWN": btn(12), "LEFT": btn(13), "RIGHT": btn(14),
+                "lx": lx, "ly": ly, "rx": rx, "ry": ry,
+                "LT": l2, "RT": r2,
+                "dpad_x": d_x,
+                "dpad_y": d_y
+            }
+            
+            # 2. Create a dictionary of the state to send to the GUI
+            self.controller_state.emit(state)
+
+            # 3. Create the data packet for the robot (No more manual LT/RT/dpad here!)
             try:
+                # By just using **state, we avoid the "multiple values" error
+                data = GamepadData(**state)
                 sock.sendto(bytes(data), (self.robot_ip, self.port))
-            except Exception:
+            except Exception as e:
                 pass
 
-            self.msleep(10) # 100Hz frequency
+            self.msleep(10) # 100Hz Polling
 
         sock.close()
-        pygame.quit()
+        pygame.joystick.quit()
+        pygame.display.quit() # Always cleanup the dummy display
 
     def stop(self):
         self.running = False

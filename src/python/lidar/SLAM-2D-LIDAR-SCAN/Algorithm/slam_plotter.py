@@ -48,7 +48,7 @@ IDLE_EPS = 1e-3
 # ==============================================================================
 
 UDP_HOST = '100.97.181.114'
-UDP_PORT = 6000
+UDP_PORT = 12345
 PLOT_EVERY = 3
 # Thread-safe queue: the UDP server thread puts scan dicts here,
 # the main/plotting thread reads from here.

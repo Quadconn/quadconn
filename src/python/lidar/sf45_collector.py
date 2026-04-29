@@ -65,7 +65,7 @@ POSE_THETA_RAD = -0.463373
 # so packets stay small and the receiver can process them one at a time.
 
 UDP_HOST = '100.97.181.114'
-UDP_PORT = 6000
+UDP_PORT = 12345
 
 
 # --------------------------------------------------------------------------------------------------------------

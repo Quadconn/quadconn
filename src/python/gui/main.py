@@ -7,12 +7,13 @@ import time
 import matplotlib
 matplotlib.use('Agg') # Force the "Silent" backend
 import matplotlib.pyplot as plt
+import numpy as np
 
 # PyQt6 UI Components
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QTimer, QPointF
 from PyQt6.QtWidgets import (QApplication, QLabel, QVBoxLayout, QHBoxLayout,
                              QWidget, QGridLayout, QPushButton, QLineEdit, QSlider)
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush
+from PyQt6.QtGui import QPainter, QImage, QPen, QColor, QBrush
 
 # Custom Imports from your modular files
 from configurations import *
@@ -20,45 +21,66 @@ from workers import VideoThread, TelemetryReceiver, AudioReceiveThread, AudioSen
 from motor_diagnostics import MOTOR_COUNT
 
 class LidarMapWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(780, 350)
-        self.grid_map = None 
-        self.is_human_detected = False
+    def __init__(self):
+        super().__init__()
+        self.map_image = None
+        self.robot_pos = (0, 0, 0)  # (x, y, theta) in feet
+        self.map_limits = [-50, 50, -50, 50]  # [minX, maxX, minY, maxY]
 
-    def update_grid(self, grid_map):
-        """Receives the persistent numpy array from the SlamProcessor."""
-        self.grid_map = grid_map
+        # 1. Set the fixed size so the layout doesn't squash it
+        self.setFixedSize(350, 350) 
+        
+        # 2. Style it
+        self.setStyleSheet("border: 1px solid #444; background-color: #111;")
+
+        # 3. FIX: Move the blank initialization HERE so it runs on startup
+        # This ensures the map isn't black while waiting for the first LiDAR packet
+        blank = np.full((201, 201), 0.5)
+        self.update_map(blank, 0, 0, 0)
+
+    def update_map(self, array, x, y, theta):
+        # 1. Convert probability array (0-1) to grayscale pixels (0-255)
+        gray_data = (array * 255).astype(np.uint8)
+        h, w = gray_data.shape
+        
+        # 2. Convert NumPy to QImage
+        self.map_image = QImage(gray_data.data, w, h, w, QImage.Format.Format_Grayscale8)
+        
+        # 3. Store the robot's current estimated location
+        self.robot_pos = (x, y, theta)
+        
+        # 4. Trigger the paintEvent
         self.update()
 
-    def set_human_status(self, is_human):
-        """Updates the visual state if the YOLO worker detects a person."""
-        self.is_human_detected = is_human
-
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(event.rect(), QColor(10, 10, 10)) # Darker background
-        
-        if self.grid_map is None:
+        # If map_image is None, it won't draw anything (This is why it was black!)
+        if not self.map_image:
             return
 
-        rows, cols = self.grid_map.shape
-        cell_w = self.width() / cols
-        cell_h = self.height() / rows
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Optimization: We only draw pixels that are likely walls (> 0.6 probability)
-        # or clear floors (< 0.4 probability)
-        for y in range(0, rows, 1): # You can increase step to 2 for performance
-            for x in range(0, cols, 1):
-                prob = self.grid_map[y, x]
-                
-                if prob > 0.6: # It's a wall!
-                    color = QColor(255, 0, 0) if self.is_human_detected else QColor(0, 255, 0)
-                    painter.fillRect(int(x * cell_w), int(y * cell_h), 
-                                     int(cell_w)+1, int(cell_h)+1, color)
-                elif prob < 0.4: # It's floor!
-                    painter.fillRect(int(x * cell_w), int(y * cell_h), 
-                                     int(cell_w)+1, int(cell_h)+1, QColor(30, 30, 30))
+        # Draw the Map
+        target_rect = self.contentsRect()
+        painter.drawImage(target_rect, self.map_image)
+
+        # --- THE RED DOT (Robot Marker) ---
+        min_x, max_x, min_y, max_y = self.map_limits
+        
+        # Calculate pixel coordinates
+        px = (self.robot_pos[0] - min_x) / (max_x - min_x) * self.width()
+        py = (1.0 - (self.robot_pos[1] - min_y) / (max_y - min_y)) * self.height()
+
+        # Draw Robot Marker
+        painter.setBrush(QColor(255, 0, 0))
+        painter.setPen(QPen(Qt.GlobalColor.white, 2))
+        painter.drawEllipse(int(px) - 5, int(py) - 5, 10, 10)
+
+        # Draw Heading Line
+        line_len = 15
+        head_x = px + line_len * np.cos(self.robot_pos[2])
+        head_y = py - line_len * np.sin(self.robot_pos[2])
+        painter.drawLine(int(px), int(py), int(head_x), int(head_y))
 
 ## Main User Interface ##
 class QuadconnDashboard(QWidget):
@@ -179,6 +201,40 @@ class QuadconnDashboard(QWidget):
         self.btn_record.clicked.connect(self.toggle_recording)
         self.sidebar.addWidget(self.btn_record)
         
+        # --- EXPANDED GAMEPAD MONITOR UI ---
+        self.sidebar.addWidget(QLabel("GAMEPAD MONITOR:"))
+        self.gp_monitor_layout = QGridLayout()
+        self.gp_items = {}
+        
+        # 16 Buttons (4x4 Grid)
+        btn_labels = [
+            "A", "B", "X", "Y", 
+            "LB", "RB", "LT", "RT", 
+            "SEL", "STA", "L3", "R3", 
+            "UP", "DN", "LF", "RI", 
+            "HOM"
+        ]
+        
+        for i, b in enumerate(btn_labels):
+            lbl = QLabel(b)
+            lbl.setFixedSize(35, 20)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("background-color: #222; color: #444; border-radius: 3px; font-size: 8px; font-weight: bold;")
+            self.gp_monitor_layout.addWidget(lbl, i // 4, i % 4)
+            self.gp_items[b] = lbl
+        
+        # Stick Status (4 Labels for LX, LY, RX, RY)
+        self.stick_layout = QHBoxLayout()
+        self.stick_displays = {}
+        for axis in ["LX", "LY", "RX", "RY"]:
+            lbl = QLabel(f"{axis}: 0.0")
+            lbl.setStyleSheet("color: #00FF00; font-size: 9px; font-family: monospace;")
+            self.stick_layout.addWidget(lbl)
+            self.stick_displays[axis] = lbl
+            
+        self.sidebar.addLayout(self.gp_monitor_layout)
+        self.sidebar.addLayout(self.stick_layout)
+        
         # 12-Motor Grid
         self.grid = QGridLayout()
         self.grid.setSpacing(4)
@@ -214,15 +270,24 @@ class QuadconnDashboard(QWidget):
         self.video_thread.start()
 
         # Add LiDAR worker
-        from workers import LidarReceiver
-        self.lidar_thread = LidarReceiver()
-        self.lidar_thread.data_received.connect(self.handle_lidar_data)
-        self.lidar_thread.map_updated.connect(self.lidar_map.update_grid)
+        # --- NEW SLAM INTEGRATION ---
+        # 1. Import the new worker we just built
+        from workers import LidarSLAMWorker
+        
+        # 2. Initialize the SLAM Engine
+        self.lidar_thread = LidarSLAMWorker()
+        
+        # 3. Connect the Signal to the Widget
+        # NOTE: We connect it to 'update_map', which is the method in your LidarMapWidget
+        self.lidar_thread.map_updated.connect(self.lidar_map.update_map)
+        
+        # 4. Start the engine
         self.lidar_thread.start()
 
         # Enable remote control
         self.control_thread = ControllerThread(ROBOT_IP)
         self.control_thread.status_signal.connect(self.update_controller_ui)
+        self.control_thread.controller_state.connect(self.update_gamepad_monitor)
 
         # Local audio threads initialization
         self.audio_recv_thread = AudioReceiveThread(); self.audio_recv_thread.start()
@@ -233,20 +298,19 @@ class QuadconnDashboard(QWidget):
         self.record_timer.timeout.connect(self.update_recording_timer)
         self.record_start_time = 0
 
-    def handle_lidar_data(self, ranges):
-        # Passes the ranges and the AI human status to the map
-        is_human = self.video_thread.is_person_in_view()
-        self.lidar_map.set_human_status(is_human)
-
     def reset_map(self):
-        # We need to wipe the occupancy grid for ALL particles
-        for p in self.lidar_thread.pf.particles:
-            p.og.occupancyGridVisited.fill(1)
-            p.og.occupancyGridTotal.fill(2)
-        
-        # Force the widget to clear visually
-        self.lidar_map.update_grid(None)
-        print("RECON MAP RESET: Probabilistic grid cleared.")
+        # New Particle-based reset
+        if hasattr(self, 'lidar_thread') and self.lidar_thread.pf:
+            for p in self.lidar_thread.pf.particles:
+                p.og.occupancyGridVisited.fill(1)
+                p.og.occupancyGridTotal.fill(2)
+            
+            # Create a "neutral gray" blank map (201x201 based on your 100ft/0.5 resolution)
+            blank_map = np.full((201, 201), 0.5) 
+            self.lidar_map.update_map(blank_map, 0, 0, 0)
+            print("RECON MAP RESET: SLAM Particle grids cleared.")
+        else:
+            print("Reset failed: SLAM engine not initialized yet.")
 
     def restart_hardware_action(self):
         # Passes manual host IP to video thread and triggers robot
@@ -319,13 +383,18 @@ class QuadconnDashboard(QWidget):
         self.btn_ai.setStyleSheet(f"border: 1px solid {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'}; color: {'#00FF00' if self.video_thread.ai_enabled else '#FF0000'};")
 
     def toggle_controller(self):
-        if not self.control_thread.isRunning():
-            self.control_thread.start()
-            self.btn_controller.setText("GAMEPAD: SEARCHING...")
-        else:
+    # 1. Check if the thread is already in the middle of working
+        if self.control_thread.isRunning():
+            print("Stopping existing controller thread...")
             self.control_thread.stop()
             self.btn_controller.setText("ENABLE GAMEPAD")
             self.btn_controller.setStyleSheet("background-color: #222; color: #FFF;")
+        else:
+        # 2. Safety: Don't start if it's currently "cleaning up" from a previous click
+            if self.control_thread.isFinished() or not self.control_thread.isRunning():
+                print("Starting new controller thread...")
+                self.control_thread.start()
+                self.btn_controller.setText("GAMEPAD: SEARCHING...")
 
     def update_controller_ui(self, status):
         self.btn_controller.setText(f"GAMEPAD: {status}")
@@ -333,6 +402,44 @@ class QuadconnDashboard(QWidget):
             self.btn_controller.setStyleSheet("background-color: #004400; color: #00FF00; border: 1px solid #00FF00;")
         else:
             self.btn_controller.setStyleSheet("background-color: #440000; color: #FF0000; border: 1px solid #FF0000;")
+
+    def update_gamepad_monitor(self, state):
+        def set_active(label_key, is_pressed):
+            if label_key in self.gp_items:
+                color = "#00FF00" if is_pressed else "#444"
+                bg = "#004400" if is_pressed else "#222"
+                self.gp_items[label_key].setStyleSheet(
+                    f"background-color: {bg}; color: {color}; border-radius: 3px; font-size: 8px; font-weight: bold;"
+                )
+
+        # Update all buttons using the keys from workers.py state dict
+        set_active("A", state.get("A"))
+        set_active("B", state.get("B"))
+        set_active("X", state.get("X"))
+        set_active("Y", state.get("Y"))
+        set_active("LB", state.get("LB"))
+        set_active("RB", state.get("RB"))
+        set_active("SEL", state.get("Select"))
+        set_active("STA", state.get("Start"))
+        set_active("L3", state.get("L3"))
+        set_active("R3", state.get("R3"))
+        set_active("HOM", state.get("Home"))
+        
+        # D-Pad
+        set_active("UP", state.get("UP"))
+        set_active("DN", state.get("DOWN"))
+        set_active("LF", state.get("LEFT"))
+        set_active("RI", state.get("RIGHT"))
+
+        # Analog Triggers (Light up if pulled more than 10%)
+        set_active("LT", state.get("LT", 0) > 0.1)
+        set_active("RT", state.get("RT", 0) > 0.1)
+
+        # Update Stick Values
+        self.stick_displays["LX"].setText(f"LX:{state.get('lx', 0):.1f}")
+        self.stick_displays["LY"].setText(f"LY:{state.get('ly', 0):.1f}")
+        self.stick_displays["RX"].setText(f"RX:{state.get('rx', 0):.1f}")
+        self.stick_displays["RY"].setText(f"RY:{state.get('ry', 0):.1f}")
 
     def update_video(self, pixmap):
         # Renders latest processed frame to UI
@@ -413,6 +520,15 @@ class QuadconnDashboard(QWidget):
             self.lbl_alert_banner.setText("SYSTEM HEALTHY")
             self.lbl_alert_banner.setStyleSheet("background-color: #002200; color: #00FF00; font-weight: bold; border: 1px solid #00FF00;")
             self.lbl_volt.setStyleSheet("color: #FFFFFF;")
+
+        # 1. Extract the speed and heading from your telemetry data object.
+        # Replace 'forward_velocity' and 'yaw' with the actual names used in your C++ struct.
+        speed = getattr(data, 'forward_velocity', 0.0)
+        heading = getattr(data, 'yaw', 0.0)
+
+        # 2. Feed it into the SLAM engine to help it predict the robot's next position.
+        if hasattr(self, 'lidar_thread') and self.lidar_thread is not None:
+            self.lidar_thread.update_motion(speed, heading)
 
     def closeEvent(self, event):
         # Ensures local and remote processes are killed when closing the window

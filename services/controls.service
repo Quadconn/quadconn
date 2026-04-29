@@ -4,6 +4,7 @@ Description= activates the control code (sends angular targets)
 # if controls exits early
 After=motor_interface.service
 Requires=motor_interface.service
+BindsTo=motor_interface.service
 [Service]
 Type=simple
 ExecStart=/home/quadconn/quadconn/scripts/bash/run_controls.sh

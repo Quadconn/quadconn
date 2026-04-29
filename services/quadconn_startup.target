@@ -1,0 +1,11 @@
+# /etc/systemd/system/quadconn_startup.target
+
+[Unit]
+Description=starting node for starting the Quadruped. Activates zeroing and controller input, while starting motor_interface
+Requires=multi-user.target
+After=multi-user.target
+AllowIsolate=no
+
+# REQUIRED FOR STARTING ON BOOT
+[Install]
+WantedBy=multi-user.target

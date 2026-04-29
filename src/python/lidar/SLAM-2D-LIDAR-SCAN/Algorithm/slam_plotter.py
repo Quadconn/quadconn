@@ -13,6 +13,8 @@ import matplotlib
 import time
 import os
 from datetime import datetime
+import ctypes
+import iceoryx2 as iox2
 
 matplotlib.use("QtAgg")
 # View modes 
@@ -84,6 +86,15 @@ def start_udp_server():
     t = threading.Thread(target=run_server, daemon=True)
     t.start()
     return t
+
+iox_node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
+iox_service = (
+    iox_node
+    .service_builder(iox2.ServiceName.new("HumanDetection"))
+    .publish_subscribe(ctypes.c_bool)
+    .open_or_create()
+)
+human_subscriber = iox_service.subscriber_builder().create()
 
 
 # ==============================================================================
@@ -255,6 +266,7 @@ class Particle:
 # ==============================================================================
 
 def processSensorData(pf, source, use_udp=False):
+    global human_present
     """
     source:
       - use_udp=False  ->  source is a dict  {timestamp: scan_entry, ...}
@@ -338,7 +350,6 @@ def processSensorData(pf, source, use_udp=False):
         nonlocal potential_human, human_markers
         human_is = human_present
         count += 1  # increases how many frames we have made
-        print(f"Frame {count}")
         now = time.monotonic()
         
         dt = (now - last_scan_time) if last_scan_time is not None else 0.0
@@ -451,6 +462,12 @@ def processSensorData(pf, source, use_udp=False):
         try:
             while True:
                 scan_entry = scan_queue.get()
+                # Gets value from publisher in workers.py if human was detected
+                sample = human_subscriber.receive()
+                if sample is not None:
+                    human_present = bool(sample.payload().value)
+                    print(f"[SLAM] Human detection update: {human_present}")
+
                 process_one(scan_entry)
         except KeyboardInterrupt:
             print("\nCtrl-C received — saving map...")
@@ -518,7 +535,12 @@ def main():
         start_udp_server()
         # Block until the very first scan arrives so we have initXY
         print("Waiting for first scan to initialise map...")
-        first_scan = scan_queue.get()
+        while True:
+            try:
+                first_scan = scan_queue.get()
+                break
+            except queue.Empty():
+                continue
         scan_queue.put(first_scan)   # put it back so the SLAM loop sees it too
 
         numSamplesPerRev = len(first_scan['range'])

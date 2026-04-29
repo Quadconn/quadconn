@@ -13,8 +13,6 @@ import matplotlib
 import time
 import os
 from datetime import datetime
-import ctypes
-import iceoryx2 as iox2
 
 matplotlib.use("QtAgg")
 # View modes 
@@ -25,8 +23,38 @@ view_mode = VIEW_LIVE     # mutable at runtime via keypress
 
 LIVE_VIEW_HALF = 50.0     # ft; window is 2*this on each axis
 
-# --- Human Detection Variables ----
-human_present = None # Change this value in function if human was detected
+# --- Human Detection Variables and velocity varibales----
+# ==============================================================================
+# Robot state — updated by update_robot_state() (called from elsewhere in this
+# file) and read by the SLAM loop via the getters below.
+# ==============================================================================
+
+# ---- USE THESE VARIABLES IN A FUNCTION TO CONSTATNLY UPDATE ROBOT SPEED AND HUMAN DETECTION ----
+# ---- HYPOTNUSE OF X AND Y VELOCITY VECTORS TO GET MAGNITUDE SCALAR VELOCITY VALUE TO PASS TO ROBOT_SPEED ----
+_state_lock = threading.Lock()
+_robot_speed_mps = 0.0     # forward speed, m/s
+_robot_theta_rad = 0.0     # absolute heading, rad
+_human_present   = False   # human detection from yolo
+
+# Initial pose used to seed the OccupancyGrid (feet / rad).
+INIT_POSE_X_FT      = 0.0
+INIT_POSE_Y_FT      = 0.0
+INIT_POSE_THETA_RAD = -0.463373
+
+
+def update_robot_state(speed_mps: float, theta_rad: float, human: bool) -> None:
+    """Push the latest velocity / heading / human flag into shared state."""
+    global _robot_speed_mps, _robot_theta_rad, _human_present
+    with _state_lock:
+        _robot_speed_mps = float(speed_mps)
+        _robot_theta_rad = float(theta_rad)
+        _human_present   = bool(human)
+
+
+def get_robot_state() -> tuple:
+    """Snapshot read: (speed_mps, theta_rad, human_present)."""
+    with _state_lock:
+        return _robot_speed_mps, _robot_theta_rad, _human_present
 
 METERS_TO_FEET = 3.28084
 IDLE_EPS = 1e-3
@@ -87,14 +115,6 @@ def start_udp_server():
     t.start()
     return t
 
-iox_node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-iox_service = (
-    iox_node
-    .service_builder(iox2.ServiceName.new("HumanDetection"))
-    .publish_subscribe(ctypes.c_bool)
-    .open_or_create()
-)
-human_subscriber = iox_service.subscriber_builder().create()
 
 
 # ==============================================================================
@@ -266,7 +286,6 @@ class Particle:
 # ==============================================================================
 
 def processSensorData(pf, source, use_udp=False):
-    global human_present
     """
     source:
       - use_udp=False  ->  source is a dict  {timestamp: scan_entry, ...}
@@ -345,32 +364,32 @@ def processSensorData(pf, source, use_udp=False):
             return None               # handled by the forloop below
 
     def process_one(scan_entry):
-        # using above variables declared
         nonlocal count, img, pos_dot, last_scan_time
         nonlocal potential_human, human_markers
-        human_is = human_present
-        count += 1  # increases how many frames we have made
+
+        # ---- Snapshot robot state from update_robot_state() ----
+        speed_mps, theta_rad, human_is = get_robot_state()
+
+        count += 1
         now = time.monotonic()
-        
         dt = (now - last_scan_time) if last_scan_time is not None else 0.0
         last_scan_time = now
-        
-        speed = scan_entry.get('speed', 0.0) * METERS_TO_FEET                # already in ft/sec
-        orientation = scan_entry.get('theta', 0.0)    # rad
+
+        speed = speed_mps * METERS_TO_FEET   # ft/s
+        orientation = theta_rad              # rad
+
+        # SF45 only ships {"range": [...]}; the SLAM particle expects x/y/theta
+        # on the first reading (it becomes the initial matchedReading).
+        scan_entry.setdefault('x', INIT_POSE_X_FT)
+        scan_entry.setdefault('y', INIT_POSE_Y_FT)
+        scan_entry.setdefault('theta', orientation)
 
         isMoving = abs(speed) > IDLE_EPS
+        motion = (
+            {'speed': speed, 'orientation': orientation, 'dt': dt}
+            if isMoving else None
+        )
 
-        if isMoving:
-            # Convert scalar forward speed + absolute heading into a world-frame
-            # displacement prediction over dt.
-            motion = {
-                'speed':       speed,
-                'orientation': orientation,
-                'dt':          dt,
-            }
-        else:
-            motion = None
-        
         pf.updateParticles(scan_entry, count, motion)
 
         if pf.weightUnbalanced():
@@ -379,7 +398,6 @@ def processSensorData(pf, source, use_udp=False):
 
         bestParticle = max(pf.particles, key=lambda p: p.weight)
 
-        # ---- plotting only every PLOT_EVERY frames ----
         if count % PLOT_EVERY != 0:
             return
         
@@ -462,12 +480,6 @@ def processSensorData(pf, source, use_udp=False):
         try:
             while True:
                 scan_entry = scan_queue.get()
-                # Gets value from publisher in workers.py if human was detected
-                sample = human_subscriber.receive()
-                if sample is not None:
-                    human_present = bool(sample.payload().value)
-                    print(f"[SLAM] Human detection update: {human_present}")
-
                 process_one(scan_entry)
         except KeyboardInterrupt:
             print("\nCtrl-C received — saving map...")
@@ -535,16 +547,16 @@ def main():
         start_udp_server()
         # Block until the very first scan arrives so we have initXY
         print("Waiting for first scan to initialise map...")
-        while True:
-            try:
-                first_scan = scan_queue.get()
-                break
-            except queue.Empty():
-                continue
+        first_scan = scan_queue.get()
         scan_queue.put(first_scan)   # put it back so the SLAM loop sees it too
 
         numSamplesPerRev = len(first_scan['range'])
-        initXY = first_scan
+        initXY = {
+            'x':     INIT_POSE_X_FT,
+            'y':     INIT_POSE_Y_FT,
+            'theta': INIT_POSE_THETA_RAD,
+            'range': first_scan['range'],
+        }
         sensorData = None
     else:
         sensorData = readJson("DataSet/PreprocessedData/SF45_Live_Data.json")

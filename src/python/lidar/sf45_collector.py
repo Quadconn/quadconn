@@ -1,38 +1,18 @@
 # --------------------------------------------------------------------------------------------------------------
 # LightWare SF45/B - Data collector for 2D SLAM
-# All units are FEET throughout (distances, map sizes, poses).
-# Sends each scan over UDP instead of writing to a JSON file.
+# All units are FEET throughout (distances).
+# Sends each scan over UDP as {"range": [...]} — LiDAR data only.
 # --------------------------------------------------------------------------------------------------------------
 
 import time
 import serial
 import json
-import math
-import os
 import socket
-import struct 
-import threading
-import ctypes
-import iceoryx2 as iox2
+import struct
+
 # --------------------------------------------------------------------------------------------------------------
 # Configuration
 # --------------------------------------------------------------------------------------------------------------
-class QuadCommandMsg(ctypes.Structure):
-    _fields_ = [
-        ("horizontal_velocity_x", ctypes.c_double),
-        ("horizontal_velocity_y", ctypes.c_double),
-        ("yaw_rate",              ctypes.c_double),
-        ("height_rate",           ctypes.c_double),
-        ("is_toggle_mode",        ctypes.c_bool),
-        ("prev_a_press",          ctypes.c_int),
-        ("is_toggle_shutdown",    ctypes.c_bool),
-        ("prev_start_press",      ctypes.c_int),
-    ]
-
-# Shared state, written by subscriber thread, read by main scan loop.
-_state_lock = threading.Lock()
-_robot_speed_mps = 0.0    # forward velocity, m/s
-_robot_theta_rad = 0.0    # integrated absolute heading, rad
 
 # Change this to match your actual serial port.
 # Run:  ls /dev/serial/by-id/   or   ls /dev/ttyUSB* /dev/ttyACM*
@@ -51,18 +31,9 @@ INVALID_SENTINEL_FT = LIDAR_MAX_RANGE_FT
 
 TARGET_SCAN_SIZE = 300
 
-POSE_X_FT = 0.0
-POSE_Y_FT = 0.0
-POSE_THETA_RAD = -0.463373
-
 # --------------------------------------------------------------------------------------------------------------
-# UDP helpers
+# UDP destination
 # --------------------------------------------------------------------------------------------------------------
-
-# FIX: sendto requires bytes, not a dict.
-# We serialise the scan entry to JSON and encode to UTF-8 bytes.
-# Each UDP packet carries exactly one scan entry (not the whole dataset)
-# so packets stay small and the receiver can process them one at a time.
 
 UDP_HOST = '100.97.181.114'
 UDP_PORT = 12345
@@ -212,6 +183,7 @@ def set_scan_speed(port, speed):
     data = list(struct.pack('<H', int(speed)))
     execute_command(port, 85, 1, data)
 
+
 def set_update_rate(port, value):
     if value < 1 or value > 12:
         raise Exception('Invalid update rate value.')
@@ -224,6 +196,7 @@ def set_default_scan_low_angle(port, value):
     # Pack the float into 4 bytes (little-endian)
     data = list(struct.pack('<f', float(value)))
     execute_command(port, 98, 1, data)
+
 
 def set_default_scan_high_angle(port, value):
     if value > 170 or value < 5:
@@ -238,6 +211,7 @@ def set_default_distance_output(port, use_last_return=False):
         execute_command(port, 27, 1, [1, 1, 0, 0])
     else:
         execute_command(port, 27, 1, [1, 1, 0, 0])
+
 
 def set_distance_stream_enable(port, enable):
     if enable:
@@ -255,7 +229,6 @@ def wait_for_reading(port, timeout=1):
     """
     response = wait_for_packet(port, 44, timeout)
 
-    # ---> UPDATE THIS CONDITION <---
     if response is None or len(response) < 8:
         return -1, 0
 
@@ -270,6 +243,10 @@ def wait_for_reading(port, timeout=1):
     return distance_ft, yaw_deg
 
 
+# --------------------------------------------------------------------------------------------------------------
+# UDP send
+# --------------------------------------------------------------------------------------------------------------
+
 # Pre-create a single socket and reuse it for every send.
 # Creating a new socket per scan adds unnecessary overhead.
 _udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -278,17 +255,14 @@ _udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 def send_scan_udp(scan_entry):
     """
     Serialise one scan entry dict to JSON bytes and fire it over UDP.
-    scan_entry looks like:
-        { "range": [...], "theta": float, "x": float, "y": float }
+    scan_entry is now just: { "range": [...] }
 
     UDP has a practical payload limit of ~65507 bytes.
-    At 300 floats * ~8 bytes each = ~2400 bytes per scan, we are well within that.
+    300 floats * ~8 bytes each = ~2400 bytes per scan — well within that.
     """
     payload = json.dumps(scan_entry).encode('utf-8')
     _udp_sock.sendto(payload, (UDP_HOST, UDP_PORT))
     print(f"  UDP sent {len(payload)} bytes to {UDP_HOST}:{UDP_PORT}")
-
-
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -323,49 +297,7 @@ def resample_scan(raw_pairs):
 
     return grid
 
-def _command_subscriber_loop():
-    global _robot_speed_mps, _robot_theta_rad
 
-    node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-    service = (node.service_builder(iox2.ServiceName.new("QuadCommand"))
-                   .publish_subscribe(QuadCommandMsg)
-                   .open_or_create())
-    subscriber = service.subscriber_builder().create()
-
-    last_t = None
-    body_yaw = 0.0
-    while True:
-        try:
-            sample = subscriber.receive()
-            if sample is None:
-                time.sleep(0.001)
-                continue
-
-            payload = sample.payload()
-            vx       = payload.horizontal_velocity_x
-            vy       = payload.horizontal_velocity_y
-            yaw_rate = payload.yaw_rate
-
-            now = time.monotonic()
-            dt = (now - last_t) if last_t is not None else 0.0
-            last_t = now
-
-            body_yaw += yaw_rate * dt
-            body_yaw = math.atan2(math.sin(body_yaw), math.cos(body_yaw))
-
-            speed = math.hypot(vx, vy)
-            motion_heading = (body_yaw + math.atan2(vy, vx)) if speed > 1e-6 else body_yaw
-            motion_heading = math.atan2(math.sin(motion_heading), math.cos(motion_heading))
-
-            with _state_lock:
-                _robot_speed_mps = speed
-                _robot_theta_rad = motion_heading
-        except Exception as e:
-            print(f"Command subscriber error: {e}")
-def start_command_subscriber():
-    t = threading.Thread(target=_command_subscriber_loop, daemon=True)
-    t.start()
-    return t
 # --------------------------------------------------------------------------------------------------------------
 # Main application
 # --------------------------------------------------------------------------------------------------------------
@@ -384,7 +316,6 @@ set_default_scan_low_angle(sensor_port, SCAN_LOW_DEG)
 set_default_scan_high_angle(sensor_port, SCAN_HIGH_DEG)
 set_default_distance_output(sensor_port, use_last_return=False)
 set_distance_stream_enable(sensor_port, True)
-start_command_subscriber()
 
 sensor_port.reset_input_buffer()
 raw_pairs = []
@@ -410,19 +341,9 @@ try:
             if crossed_start:
                 if in_scan and len(raw_pairs) > TARGET_SCAN_SIZE // 4:
                     scan = resample_scan(raw_pairs)
-                    with _state_lock:
-                        speed_mps = _robot_speed_mps
-                        theta_rad = _robot_theta_rad
-                    scan_entry = {
-                        "range": scan,
-                        "theta": float(theta_rad),
-                        "x":     float(POSE_X_FT),
-                        "y":     float(POSE_Y_FT),
-                        "speed": float(speed_mps),
-                    }
+                    scan_entry = {"range": scan}
                     send_scan_udp(scan_entry)
-                    print(f"Sent scan: {len(raw_pairs)
-                                        } raw -> {TARGET_SCAN_SIZE} bins")
+                    print(f"Sent scan: {len(raw_pairs)} raw -> {TARGET_SCAN_SIZE} bins")
 
                 raw_pairs = []
                 in_scan = True
@@ -435,16 +356,7 @@ try:
 except KeyboardInterrupt:
     if in_scan and raw_pairs:
         scan = resample_scan(raw_pairs)
-        with _state_lock:
-            speed_mps = _robot_speed_mps
-            theta_rad = _robot_theta_rad
-        scan_entry = {
-            "range": scan,
-            "theta": float(theta_rad),
-            "x":     float(POSE_X_FT),
-            "y":     float(POSE_Y_FT),
-            "speed": float(speed_mps),
-        }
+        scan_entry = {"range": scan}
         send_scan_udp(scan_entry)
         print(f"Final partial scan sent: {len(raw_pairs)} raw samples.")
 

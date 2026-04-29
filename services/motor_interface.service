@@ -3,7 +3,7 @@
 Description=enables interfacing for motors via provided angles
 # Starts after zeroing, and closes controls if it exits.
 After=zero_motors.service
-BindsTo=controls.service
+Requires=controls.service
 [Service]
 Type=notify
 ExecStart=/home/quadconn/quadconn/scripts/bash/run_motor_controller.sh

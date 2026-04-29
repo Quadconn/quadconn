@@ -24,10 +24,4 @@ The system relies on these services:
 You must reload the systemd daemon anytime you create or modify these files, and then enable them.
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable motor_interface.service controls.service udp_controller.service
-```
-
-Verify if the services are running using 
-```bash
-sudo systemctl status motor_interface.service controls.service udp_controller.service
 ```

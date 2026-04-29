@@ -1,0 +1,12 @@
+[Unit]
+Description=Target to enable Quadconn controls, motor interface, and diagnostics
+# Ensures the network is up if these services communicate over UDP
+After=network.target
+
+# Pull in the requested services. 
+# Using Wants= ensures that if one service fails to start, 
+# the others will still attempt to run.
+Wants=controls.service
+Wants=motor_interface.service
+Wants=diagnostics.service
+

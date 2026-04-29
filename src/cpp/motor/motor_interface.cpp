@@ -18,9 +18,15 @@
 
 #define ACCEL_LIMIT 2000
 #define KP_SCALE    1.0
+
+// Helper to generate random double in a range
+double f_rand(double min, double max) {
+    return min + (double)rand() / RAND_MAX * (max - min);
+}
+
 int main(int argc, char** argv) {
-    using namespace mjbots;
     using namespace iox2;
+    srand(time(NULL));
 
     /* START: BRACKET GUARD -- Init Node */
     auto motor_node = make_node("motor_node");
@@ -35,54 +41,11 @@ int main(int argc, char** argv) {
     /* END: BRACKET GUARD -- Init Node */
 
 
-    std::map<std::shared_ptr<moteus::Fdcanusb>, BusGroup> bus_groups_map;
-
-    for (const auto& def : get_robot_config()) {
-        moteus::Controller::Options opts{};
-        opts.id = def.can_id;
-        opts.transport = def.bus;
-        // disable the following replies
-        opts.query_format.mode =        moteus::Resolution::kIgnore;
-        opts.query_format.position =    moteus::Resolution::kIgnore;
-        opts.query_format.velocity =    moteus::Resolution::kIgnore;
-        // enable the following replies
-        opts.query_format.voltage =     moteus::Resolution::kInt8;
-        opts.query_format.torque =      moteus::Resolution::kFloat; 
-        opts.query_format.power =       moteus::Resolution::kFloat;  
-        opts.query_format.fault =       moteus::Resolution::kInt8;
-        opts.query_format.temperature = moteus::Resolution::kInt8;
-
-        // populate BusGroup directly using key-value pairs
-        // if already exists, then retrieve reference. Otherwise, create
-        // another key-value pair
-        auto& group = bus_groups_map[def.bus];
-
-        group.bus = def.bus;
-        // populate vectors once
-        group.controllers.push_back(std::make_shared<moteus::Controller>(opts));
-        group.legs.push_back(def.leg);
-        group.joint_types.push_back(def.joint_idx);
-        
-        // Pre-allocate empty frame to avoid resizing in the hot loop
-        group.frames.push_back(moteus::CanFdFrame()); 
-    }
-
-    // index bus_groups to iterate through controllers/commands.
-    // will now use bus_groups for all communication (no more map)
-    std::vector<BusGroup> bus_groups;
-    for (auto& [bus, group] : bus_groups_map) {
-        if (bus == nullptr) {
-            std::cout << "bus in warning not connnected, program exiting early\n";
-            return 1;
-        }
-        bus_groups.push_back(std::move(group));
-    }
-
     // after motor has finished initializing, start control service
     // and pause until angles are being published
     std::cout << "waiting for control code\n";
     sd_notify(1, "READY=1\n"
-                 "STATUS=Finished Initialization...");
+                "STATUS=Finished Initialization...");
     while (true) {
         auto event = system_listener.blocking_wait_one();
         if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
@@ -91,21 +54,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Clear faults
-    for (auto& group : bus_groups) {
-        for(size_t i = 0; i < group.controllers.size(); ++i) {
-            group.frames[i] = group.controllers[i]->MakeStop();
-        }
-        group.replies.clear();
-        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
-    }
-
     // Prepare batch of commands
     BodyJointAngles target_val{};
-    //     
 
-    // handles moteus sending, query, and receiving data structures
-    moteus::PositionMode::Command cmd;
 
     // Execution loop
     std::cout << "starting motor loop\n";
@@ -123,71 +74,35 @@ int main(int argc, char** argv) {
             if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::QuadControlDone) {
                         // receiving values from JointAngles struct
                 target_val = ipc_receive(angle_subscriber).value_or(target_val);
-
-                //  build the CAN frames using the latest targets 
-                //  grouped by buses
-                for (auto& group : bus_groups) {
-                    // Build frames for just this specific bus
-                    for (size_t i = 0; i < group.controllers.size(); ++i) {
-                                                    // legs and joint_types are indexable by integer
-                        double angle_cmd = parse_angle(group.legs[i], group.joint_types[i], target_val);
-                        cmd.position = rad2turns(angle_cmd);
-                        cmd.velocity = std::numeric_limits<double>::quiet_NaN();
-                        cmd.accel_limit = ACCEL_LIMIT; 
-                        cmd.kp_scale = KP_SCALE;
-                        // index vector like array (avoid push_back resizing)
-                        group.frames[i] = group.controllers[i]->MakePosition(cmd);
-                    }
-                    // clear all data before writing replies
-                    group.replies.clear();
-                    group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
-                }
+                std::cout << "angle values received" << target_val << "\n";
+                
                 
                 // Loan default-constructed memory directly from the shared pool
                 auto sample_s_opt = diagnostic_publisher.loan();
                 if (sample_s_opt.has_value()) {
                     auto sample_s = std::move(sample_s_opt.value());
-
-                    for (const auto& group : bus_groups) {
-                        for (const auto& frame: group.replies) {
-                            auto result = moteus::Query::Parse(frame.data, frame.size);
-                            int target_idx = frame.source - 1; 
-                            
-                            if (target_idx >= 0 && target_idx < MOTOR_NUM) {
-                                motor_info::populate_diag(
-                                    result, 
-                                    sample_s.payload_mut().motor_instance[target_idx]);
-                            }
-                        }
-                    }
                     // Send the sample off to any subscribers
-                    iox2::send(std::move(sample_s)).value();
-                    
-                }
-            } else {
-                for (auto& group : bus_groups) {
-                    for (size_t i = 0; i < group.controllers.size(); ++i) {
-                        cmd.position = std::numeric_limits<double>::quiet_NaN();
-                        cmd.velocity = std::numeric_limits<double>::quiet_NaN(); 
-                        group.frames[i] = group.controllers[i]->MakePosition(cmd);
+                    auto& array_payload = sample_s.payload_mut();
+                    for (int i = 0; i < MOTOR_COUNT; ++i) {
+                        auto& m = array_payload.motor_instance[i];
+                        
+                        // Fill with dummy data
+                        m.mode = rand() % 16;
+                        m.trajectory_complete = 1;
+                        m.position = f_rand(-3.14, 3.14);
+                        m.velocity = f_rand(-10.0, 10.0);
+                        m.torque = f_rand(-2.0, 2.0);
+                        m.voltage = f_rand(22.0, 26.0);
+                        m.temperature = f_rand(30.0, 65.0);
+                        m.motor_temperature = m.temperature + 5.0;
                     }
-                    // clear all data before writing replies
-                    group.replies.clear();
-                    group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
+                    if (!iox2::send(std::move(sample_s)).has_value()) {
+                        std::cerr << "Failed to send diagnostic sample!" << std::endl;
+                    }
                 }
-            }
-                
+            } 
         }
     }
 
-    // End safely,
-    // Clear faults
-    for (auto& group : bus_groups) {
-        for(size_t i = 0; i < group.controllers.size(); ++i) {
-            group.frames[i] = group.controllers[i]->MakeStop();
-        }
-        group.replies.clear();
-        group.bus->BlockingCycle(group.frames.data(), group.frames.size(), &group.replies);
-    }
     return 0;
 }

@@ -6,7 +6,7 @@ After=motor_interface.service
 
 [Service]
 Type=simple
-ExecStart=/home/quadconn/quadconn/scripts/bash/run_udp_gamepad_receiver.sh
+ExecStart=/home/quadconn/quadconn/scripts/bash/run_udp_diagnostics.sh
 WorkingDirectory=/home/quadconn/quadconn/
 Restart=on-failure
 User=quadconn

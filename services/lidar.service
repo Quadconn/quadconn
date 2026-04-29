@@ -11,3 +11,7 @@ ExecStart=/home/quadconn/quadconn/scripts/bash/run_lidar.sh
 WorkingDirectory=/home/quadconn/quadconn/
 Restart=on-failure
 User=quadconn
+
+[Install]
+# This tells systemd to start this service when the target is started
+WantedBy=quadconn_startup.target  

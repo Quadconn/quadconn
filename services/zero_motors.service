@@ -3,14 +3,16 @@ Description= Gets initial position of motors
 # This ties the lifecycle of this service to the target
 PartOf=quadconn_startup.target 
 After=network.service
+
 [Service]
 # must exit with "return 0" to execute other dependencies
 Type=oneshot
-ExecStart=/home/quadconn/quadconn/scripts/bash/run_motor_controller.sh
+ExecStart=/home/quadconn/quadconn/scripts/bash/zero_motors.sh
 WorkingDirectory=/home/quadconn/quadconn/
 # change on-failure to no if not needed in future runs
 Restart=on-failure
 User=quadconn
+RemainAfterExit=yes
 
 [Install]
 # This tells systemd to start this service when the target is started

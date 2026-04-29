@@ -1,6 +1,9 @@
 #pragma once
 
 namespace quad::common {
+    // DEBUG FOR EXITING LOOP EARLY
+    inline constexpr int    MAX_LOOPS = 1000;
+
     // Timing
     inline constexpr double DT        = 0.01;
     inline constexpr int    DT_MILLI  = DT * 1E3;

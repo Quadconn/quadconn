@@ -7,6 +7,7 @@
 #include <map>
 #include <filesystem>
 #include <stdexcept>
+#include <systemd/sd-daemon.h>
 
 #include "joint_angles.hpp"
 #include "motor_diagnostics.hpp"
@@ -77,7 +78,11 @@ int main(int argc, char** argv) {
         bus_groups.push_back(std::move(group));
     }
 
+    // after motor has finished initializing, start control service
+    // and pause until angles are being published
     std::cout << "waiting for control code\n";
+    sd_notify(1, "READY=1\n"
+                 "STATUS=Finished Initialization...");
     while (true) {
         auto event = system_listener.blocking_wait_one();
         if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::StartMotors) {
@@ -110,6 +115,7 @@ int main(int argc, char** argv) {
         auto event = system_listener.blocking_wait_one();
         // catch stop signal
         if (event.has_value() && event.value().has_value()) {
+            // supplied upon closing of control code
             if(bb::into<SystemLogic>(event.value()->as_value()) == SystemLogic::KillMotors) {
                 std::cout << "stopping motor_controller process";
                 break;

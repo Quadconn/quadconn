@@ -203,6 +203,8 @@ QuadControl::Mode QuadControl::step_shutdown() {
             _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
         }
         _joint_angles = body_inverse_kinematics(_foot_locations);
+    } else {
+        _is_immobile = true;
     }
 
     return Mode::SHUTDOWN;

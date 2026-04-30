@@ -3,8 +3,8 @@ import threading
 import queue
 import copy
 import math
-from ScanMatcher_OGBased import ScanMatcher
-from OccupancyGrid import OccupancyGrid
+from Utils.ScanMatcher_OGBased import ScanMatcher
+from Utils.OccupancyGrid import OccupancyGrid
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import json
@@ -13,13 +13,8 @@ import matplotlib
 import time
 import os
 from datetime import datetime
+
 matplotlib.use("QtAgg")
-
-
-# Robot state — updated at 100 Hz by an external function (to be written).
-robot_speed = 0.0           # ft/sec, scalar(after m/s -> ft/s conversion)
-robot_orientation = 0.0     # rad
-
 # View modes 
 # View mode (toggled by Ctrl+= / Ctrl+-)
 VIEW_LIVE = 'live'        # robot-centered 100x100 window
@@ -33,16 +28,6 @@ human_present = None # Change this value in function if human was detected
 
 METERS_TO_FEET = 3.28084
 IDLE_EPS = 1e-3
-
-def update_robot_state(speed_mps, orientation_rad):
-    """
-    Called by whoever is publishing robot state at 100 Hz.
-    speed_mps:        forward speed in meters per second
-    orientation_rad:  absolute heading in radians
-    """
-    global robot_speed, robot_orientation
-    robot_speed = speed_mps * METERS_TO_FEET
-    robot_orientation = orientation_rad
 
 # ==============================================================================
 #  All units are FEET throughout (distances, map sizes, poses, grid size).
@@ -62,7 +47,7 @@ def update_robot_state(speed_mps, orientation_rad):
 #     use_udp=True from main() to use the live path.
 # ==============================================================================
 
-UDP_HOST = '127.0.0.1'
+UDP_HOST = '100.119.158.85'
 UDP_PORT = 6000
 PLOT_EVERY = 3
 # Thread-safe queue: the UDP server thread puts scan dicts here,
@@ -359,9 +344,8 @@ def processSensorData(pf, source, use_udp=False):
         dt = (now - last_scan_time) if last_scan_time is not None else 0.0
         last_scan_time = now
         
-        # Read current robot state (set by update_robot_state at 100 Hz elsewhere).
-        speed = robot_speed                # already in ft/sec
-        orientation = robot_orientation    # rad
+        speed = scan_entry.get('speed', 0.0) * METERS_TO_FEET                # already in ft/sec
+        orientation = scan_entry.get('theta', 0.0)    # rad
 
         isMoving = abs(speed) > IDLE_EPS
 
@@ -532,10 +516,14 @@ def main():
         # Start the UDP server in the background before building the filter,
         # so no packets are dropped while initialisation runs.
         start_udp_server()
-
         # Block until the very first scan arrives so we have initXY
         print("Waiting for first scan to initialise map...")
-        first_scan = scan_queue.get()
+        while True:
+            try:
+                first_scan = scan_queue.get()
+                break
+            except queue.Empty():
+                continue
         scan_queue.put(first_scan)   # put it back so the SLAM loop sees it too
 
         numSamplesPerRev = len(first_scan['range'])
@@ -567,7 +555,6 @@ def main():
 
     pf = ParticleFilter(numParticles, ogParameters, smParameters)
     processSensorData(pf, sensorData, use_udp=use_udp)
-
 
 if __name__ == '__main__':
     main()

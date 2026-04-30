@@ -25,106 +25,121 @@ class ParticleFilter:
             p = Particle(ogParameters, smParameters)
             self.particles.append(p)
 
-    def updateParticles(self, reading, count):
+    # FIX: Added 'motion' parameter here
+    def updateParticles(self, reading, count, motion=None):
         for i in range(self.numParticles):
-            self.particles[i].update(reading, count)
+            self.particles[i].update(reading, count, motion)
 
     def weightUnbalanced(self):
         self.normalizeWeights()
         variance = 0
         for i in range(self.numParticles):
             variance += (self.particles[i].weight - 1 / self.numParticles) ** 2
-            # variance += self.particles[i].weight**2
-        print(variance)
-        if variance > ((self.numParticles - 1) / self.numParticles)**2 + (self.numParticles - 1.000000000000001) * (1 / self.numParticles)**2:
-            # if variance > 2 / self.numParticles:
-            return True
-        else:
-            return False
+        
+        threshold = (
+            ((self.numParticles - 1) / self.numParticles) ** 2
+            + (self.numParticles - 1.000000000000001) *
+            (1 / self.numParticles) ** 2
+        )
+        return variance > threshold
 
     def normalizeWeights(self):
-        weightSum = 0
-        for i in range(self.numParticles):
-            weightSum += self.particles[i].weight
-        for i in range(self.numParticles):
-            self.particles[i].weight = self.particles[i].weight / weightSum
+        weightSum = sum(p.weight for p in self.particles)
+        if weightSum == 0:
+            for p in self.particles:
+                p.weight = 1.0 / self.numParticles
+        else:
+            for p in self.particles:
+                p.weight /= weightSum
 
     def resample(self):
-        # for particle in self.particles:
-        #     particle.plotParticle()
-        #     print(particle.weight)
-        weights = np.zeros(self.numParticles)
-        tempParticles = []
-        for i in range(self.numParticles):
-            weights[i] = self.particles[i].weight
-            tempParticles.append(copy.deepcopy(self.particles[i]))
-        resampledParticlesIdx = np.random.choice(
-            np.arange(self.numParticles), self.numParticles, p=weights)
-        for i in range(self.numParticles):
-            self.particles[i] = copy.deepcopy(
-                tempParticles[resampledParticlesIdx[i]])
-            self.particles[i].weight = 1 / self.numParticles
+        import copy
+        import numpy as np
+        weights = np.array([p.weight for p in self.particles], dtype=float)
+        idx = np.random.choice(self.numParticles, self.numParticles, p=weights)
+        new_particles = []
+        used = set()
+        for i in idx:
+            if i not in used:
+                used.add(i)
+                new_particles.append(self.particles[i])
+            else:
+                new_particles.append(copy.deepcopy(self.particles[i]))
+        for p in new_particles:
+            p.weight = 1.0 / self.numParticles
+        self.particles = new_particles
 
 
 class Particle:
     def __init__(self, ogParameters, smParameters):
-        initMapXLength, initMapYLength, initXY, unitGridSize, lidarFOV, lidarMaxRange, numSamplesPerRev, wallThickness = ogParameters
-        scanMatchSearchRadius, scanMatchSearchHalfRad, scanSigmaInNumGrid,  moveRSigma, maxMoveDeviation, \
-            turnSigma, missMatchProbAtCoarse, coarseFactor = smParameters
-        og = OccupancyGrid(initMapXLength, initMapYLength, initXY, unitGridSize,
-                           lidarFOV, numSamplesPerRev, lidarMaxRange, wallThickness)
-        sm = ScanMatcher(og, scanMatchSearchRadius, scanMatchSearchHalfRad, scanSigmaInNumGrid,
-                         moveRSigma, maxMoveDeviation, turnSigma, missMatchProbAtCoarse, coarseFactor)
-        self.og = og
-        self.sm = sm
+        from OccupancyGrid import OccupancyGrid
+        from ScanMatcher_OGBased import ScanMatcher
+        import math
+        
+        (initMapXLength, initMapYLength, initXY, unitGridSize,
+         lidarFOV, lidarMaxRange, numSamplesPerRev, wallThickness) = ogParameters
+
+        (scanMatchSearchRadius, scanMatchSearchHalfRad, scanSigmaInNumGrid,
+         moveRSigma, maxMoveDeviation, turnSigma,
+         missMatchProbAtCoarse, coarseFactor) = smParameters
+
+        self.og = OccupancyGrid(
+            initMapXLength, initMapYLength, initXY, unitGridSize,
+            lidarFOV, numSamplesPerRev, lidarMaxRange, wallThickness
+        )
+        self.sm = ScanMatcher(
+            self.og, scanMatchSearchRadius, scanMatchSearchHalfRad,
+            scanSigmaInNumGrid, moveRSigma, maxMoveDeviation,
+            turnSigma, missMatchProbAtCoarse, coarseFactor
+        )
         self.xTrajectory = []
         self.yTrajectory = []
-        self.weight = 1
+        self.weight = 1.0
+        self.prevMatchedReading = None
+        self.prevRawReading = None
 
-    def updateEstimatedPose(self, currentRawReading):
+    # FIX: This now uses the motion data (speed/dt) from your dashboard
+    def updateEstimatedPose(self, currentRawReading, motion):
+        import math
+        speed = motion['speed']
+        orientation = motion['orientation']
+        dt = motion['dt']
+
+        # Calculate displacement based on speed and heading
+        dx = speed * math.cos(orientation) * dt
+        dy = speed * math.sin(orientation) * dt
+
         estimatedReading = {
-            'x': self.prevMatchedReading['x'],
-            'y': self.prevMatchedReading['y'],
-            'theta': self.prevMatchedReading['theta'],
-            'range': currentRawReading['range']
+            'x':     self.prevMatchedReading['x'] + dx,
+            'y':     self.prevMatchedReading['y'] + dy,
+            'theta': orientation,   
+            'range': currentRawReading['range'],
         }
+        estMovingDist = math.hypot(dx, dy)
+        estMovingTheta = math.atan2(dy, dx) if estMovingDist > 1e-6 else None
+        return estimatedReading, estMovingDist, estMovingTheta, estMovingTheta
 
-        estMovingDist = 0.0
-        estMovingTheta = None
-        rawMovingTheta = None
-
-        return estimatedReading, estMovingDist, estMovingTheta, rawMovingTheta
-
-    def getMovingTheta(self, matchedReading):
-        x, y, theta, range = matchedReading['x'], matchedReading[
-            'y'], matchedReading['theta'], matchedReading['range']
-        prevX, prevY = self.xTrajectory[-1], self.yTrajectory[-1]
-        xMove, yMove = x - prevX, y - prevY
-        move = math.sqrt(xMove ** 2 + yMove ** 2)
-        if move != 0:
-            if yMove > 0:
-                movingTheta = math.acos(xMove / move)
-            else:
-                movingTheta = -math.acos(xMove / move)
-        else:
-            movingTheta = None
-        return movingTheta
-
-    def update(self, reading, count):
+    def update(self, reading, count, motion=None):
         if count == 1:
-            self.prevRawMovingTheta, self.prevMatchedMovingTheta = None, None
-            matchedReading, confidence = reading, 1
+            matchedReading, confidence = reading, 1.0
+        elif motion is None:
+            # Fallback if no motion is provided
+            matchedReading = self.prevMatchedReading.copy()
+            matchedReading['range'] = reading['range']
+            confidence = 1.0
         else:
-            currentRawReading = reading
-            estimatedReading, estMovingDist, estMovingTheta, rawMovingTheta = self.updateEstimatedPose(
-                currentRawReading)
+            estimatedReading, estMovingDist, estMovingTheta, rawMovingTheta = \
+                self.updateEstimatedPose(reading, motion)
+            
             matchedReading, confidence = self.sm.matchScan(
-                estimatedReading, estMovingDist, estMovingTheta, count, matchMax=False)
-            self.prevRawMovingTheta = rawMovingTheta
-            self.prevMatchedMovingTheta = self.getMovingTheta(matchedReading)
-        self.updateTrajectory(matchedReading)
+                estimatedReading, estMovingDist, estMovingTheta,
+                count, matchMax=False
+            )
+
+        self.xTrajectory.append(matchedReading['x'])
+        self.yTrajectory.append(matchedReading['y'])
         self.og.updateOccupancyGrid(matchedReading)
-        self.prevMatchedReading, self.prevRawReading = matchedReading, reading
+        self.prevMatchedReading = matchedReading
         self.weight *= confidence
 
     def updateTrajectory(self, matchedReading):

@@ -49,6 +49,24 @@ int main(int argc, char* argv[]) {
         (GstMessageType)(GST_MESSAGE_ERROR | GST_MESSAGE_EOS)
     );
 
+    if (msg != nullptr) {
+        if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR) {
+            GError* err = nullptr;
+            gchar* debug_info = nullptr;
+            gst_message_parse_error(msg, &err, &debug_info);
+            
+            if (err) {
+                std::cerr << "GStreamer Error: " << err->message << std::endl;
+                g_error_free(err); // Use g_error_free for GError
+            }
+            if (debug_info) {
+                std::cerr << "Debug Info: " << debug_info << std::endl;
+                g_free(debug_info); // Use g_free for gchar*
+            }
+        }
+        gst_message_unref(msg);
+    }
+    
     // Clean up
     if (msg != nullptr) gst_message_unref(msg);
     gst_object_unref(bus);

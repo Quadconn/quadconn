@@ -13,8 +13,6 @@ import matplotlib
 import time
 import os
 from datetime import datetime
-import ctypes
-import iceoryx2 as iox2
 
 matplotlib.use("QtAgg")
 # View modes 
@@ -49,8 +47,8 @@ IDLE_EPS = 1e-3
 #     use_udp=True from main() to use the live path.
 # ==============================================================================
 
-UDP_HOST = '100.97.181.114'
-UDP_PORT = 12345
+UDP_HOST = '100.119.158.85'
+UDP_PORT = 6000
 PLOT_EVERY = 3
 # Thread-safe queue: the UDP server thread puts scan dicts here,
 # the main/plotting thread reads from here.
@@ -86,15 +84,6 @@ def start_udp_server():
     t = threading.Thread(target=run_server, daemon=True)
     t.start()
     return t
-
-iox_node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-iox_service = (
-    iox_node
-    .service_builder(iox2.ServiceName.new("HumanDetection"))
-    .publish_subscribe(ctypes.c_bool)
-    .open_or_create()
-)
-human_subscriber = iox_service.subscriber_builder().create()
 
 
 # ==============================================================================
@@ -266,7 +255,6 @@ class Particle:
 # ==============================================================================
 
 def processSensorData(pf, source, use_udp=False):
-    global human_present
     """
     source:
       - use_udp=False  ->  source is a dict  {timestamp: scan_entry, ...}
@@ -350,6 +338,7 @@ def processSensorData(pf, source, use_udp=False):
         nonlocal potential_human, human_markers
         human_is = human_present
         count += 1  # increases how many frames we have made
+        print(f"Frame {count}")
         now = time.monotonic()
         
         dt = (now - last_scan_time) if last_scan_time is not None else 0.0
@@ -462,12 +451,6 @@ def processSensorData(pf, source, use_udp=False):
         try:
             while True:
                 scan_entry = scan_queue.get()
-                # Gets value from publisher in workers.py if human was detected
-                sample = human_subscriber.receive()
-                if sample is not None:
-                    human_present = bool(sample.payload().value)
-                    print(f"[SLAM] Human detection update: {human_present}")
-
                 process_one(scan_entry)
         except KeyboardInterrupt:
             print("\nCtrl-C received — saving map...")

@@ -17,12 +17,15 @@ int main() {
         (make_service<GamepadData>("GamepadData", quadcontrol_node));
     auto interface_notifier = make_notifier
         (make_event("SystemLogic", quadcontrol_node));
+    auto command_publisher = make_publisher<QuadCommand>
+        (make_service<QuadCommand>("QuadCommand", quadcontrol_node));
     /* END: NODE DECLARATION */
 
     QuadControl quad;
     BodyJointAngles angles;
     QuadCommand command = {0.0};
 
+    
     interface_notifier.notify_with_custom_event_id(iox2::EventId(
                     iox2::bb::into<size_t>(SystemLogic::StartMotors))).value();
 
@@ -34,13 +37,24 @@ int main() {
             auto& data_ref = received_val.value();
 
             command.update(data_ref);
+            
         }
 
         quad.set_command(command);
 
+        ipc_send_zerocopy(command_publisher, [&](auto& payload) {
+            payload = command;   // copies all 8 fields
+        });
+
         ipc_send_zerocopy(angle_publisher, [&](auto& payload) {payload = quad.step();});
         interface_notifier.notify_with_custom_event_id(iox2::EventId(
                            iox2::bb::into<size_t>(SystemLogic::QuadControlDone))).value();
+        
+        // TODO: upon conclusion of folding, send signal to end motor controller code
+        if (quad._is_immobile) {
+            interface_notifier.notify_with_custom_event_id(iox2::EventId(
+                           iox2::bb::into<size_t>(SystemLogic::KillMotors))).value();
+        }
     }
 
     return 0;

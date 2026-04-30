@@ -64,8 +64,8 @@ POSE_THETA_RAD = -0.463373
 # Each UDP packet carries exactly one scan entry (not the whole dataset)
 # so packets stay small and the receiver can process them one at a time.
 
-UDP_HOST = '100.97.181.114'
-UDP_PORT = 12345
+UDP_HOST = '100.119.158.85'
+UDP_PORT = 6000
 
 
 # --------------------------------------------------------------------------------------------------------------
@@ -326,11 +326,16 @@ def resample_scan(raw_pairs):
 def _command_subscriber_loop():
     global _robot_speed_mps, _robot_theta_rad
 
-    node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
-    service = (node.service_builder(iox2.ServiceName.new("QuadCommand"))
-                   .publish_subscribe(QuadCommandMsg)
-                   .open_or_create())
-    subscriber = service.subscriber_builder().create()
+    try:
+        # If this fails, it won't crash the whole collector script
+        node = iox2.NodeBuilder.new().create(iox2.ServiceType.Ipc)
+        service = (node.service_builder(iox2.ServiceName.new("QuadCommand"))
+                       .publish_subscribe(QuadCommandMsg)
+                       .open_or_create())
+        subscriber = service.subscriber_builder().create()
+    except Exception as e:
+        print(f"⚠️ Telemetry Warning: iceoryx2 failed to start ({e}). Speed will default to 0.")
+        return # Exit the thread safely
 
     last_t = None
     body_yaw = 0.0

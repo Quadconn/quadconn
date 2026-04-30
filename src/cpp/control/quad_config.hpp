@@ -44,9 +44,9 @@ namespace quad::config {
 
     // Kinematic Lengths
     inline constexpr double ABDUCTION_OFFSET = 0.10300;
-    inline constexpr double L1               = 0.19625;
+    inline constexpr double L1               = 0.15625;
     inline constexpr double L2               = 0.16631;
-    inline constexpr double LEG_FB           = 0.30625;     // Front-back distance from center of body to hip joint axis of rotation
+    inline constexpr double LEG_FB           = 0.25825;     // Front-back distance from center of body to hip joint axis of rotation
     inline constexpr double LEG_LR           = 0.11873; // Left-right distance from center of body to hip joint plane of rotation
 
     // Time step to clamp height correction speed
@@ -110,10 +110,10 @@ namespace quad::config {
 
     // Default/Idle foot locations relative to center of body
     inline const std::array<Eigen::Vector3d, quad::common::LEG_COUNT> DEFAULT_STANCE {
-        Eigen::Vector3d{ LEG_FB - 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{ LEG_FB - 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
-        Eigen::Vector3d{-LEG_FB + 0.03,   ABDUCTION_OFFSET + LEG_LR , 0.0},
-        Eigen::Vector3d{-LEG_FB + 0.03, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{ LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{ LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
+        Eigen::Vector3d{-LEG_FB,   ABDUCTION_OFFSET + LEG_LR , 0.0},
+        Eigen::Vector3d{-LEG_FB, -(ABDUCTION_OFFSET + LEG_LR), 0.0},
     };
 
     inline constexpr BodyJointAngles STARTUP_ANGLES = {{

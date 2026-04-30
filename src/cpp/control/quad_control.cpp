@@ -321,13 +321,17 @@ void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_in
     //
     // For right side legs hip pitch and knee pitch must go opposite direction than
     // left side legs
-    if (leg_index == common::FR) {
+    if (leg_index == common::FL) {
         angles.hip_roll   = -angles.hip_roll;
+
+    } else if (leg_index == common::FR) {
         angles.hip_pitch  = -angles.hip_pitch;
         angles.knee_pitch = -angles.knee_pitch;
 
-    } else if (leg_index == common::BR) {
+    } else if (leg_index == common::BL) {
         angles.hip_roll   = -angles.hip_roll;
+
+    } else if (leg_index == common::BR) {
         angles.hip_pitch  = -angles.hip_pitch;
         angles.knee_pitch = -angles.knee_pitch;
     }

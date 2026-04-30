@@ -115,6 +115,10 @@ class LidarSLAMWorker(QThread):
     # Signals the GUI: Map (numpy array), X, Y, Theta, and Human Detected (bool)
     map_updated = pyqtSignal(np.ndarray, float, float, float, bool)
 
+    def update_human_status(self, human_present):
+        with self._state_lock:
+            self._human_present = bool(human_present)
+            
     def __init__(self):
         super().__init__()
         self.running = True
@@ -174,9 +178,6 @@ class LidarSLAMWorker(QThread):
                     current_theta_rad = self._robot_theta_rad
                     human_is_present = self._human_present
 
-                self._robot_speed_fps = np.sqrt(command_horizontal_vel_x**2 + command_horizontal_vel_y**2) * METERS_TO_FEET
-                self._robot_theta_rad = command_yaw_rate * (180.0 / np.pi)
-
                 # Initialization on first packet
                 if self.pf is None:
                     # Provide starting pose if collector doesn't send it
@@ -195,9 +196,9 @@ class LidarSLAMWorker(QThread):
 
                 # --- STEP B: APPLY MOTION ---
                 # Provide motion data to the Particle Filter if robot is moving
-                isMoving = abs(speed_fps) > IDLE_EPS
+                isMoving = abs(current_speed_fps) > IDLE_EPS
                 motion = {
-                    'speed': speed_fps, 
+                    'speed': current_speed_fps, 
                     'orientation': current_theta_rad, 
                     'dt': dt
                 } if isMoving else None

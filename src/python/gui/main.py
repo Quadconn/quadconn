@@ -318,7 +318,7 @@ class QuadconnDashboard(QWidget):
             
             # Create a "neutral gray" blank map (201x201 based on your 100ft/0.5 resolution)
             blank_map = np.full((201, 201), 0.5) 
-            self.lidar_map.update_map(blank_map, 0, 0, 0)
+            self.lidar_map.update_map(blank_map, 0, 0, 0, False)
             print("RECON MAP RESET: SLAM Particle grids cleared.")
         else:
             print("Reset failed: SLAM engine not initialized yet.")
@@ -474,7 +474,7 @@ class QuadconnDashboard(QWidget):
         if hasattr(self, 'lidar_thread'):
             # We don't have new speed/heading here, so we just pass 0.0 or last known
             # This ensures the SLAM engine sees the 'True' flag from YOLO immediately
-            self.lidar_thread.update_robot_state(0.0, 0.0, is_human)
+            self.lidar_thread.update_human_status(is_human)
 
     def update_connection_ui(self, is_online):
         # Updates status indicator based on telemetry reception

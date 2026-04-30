@@ -203,6 +203,8 @@ QuadControl::Mode QuadControl::step_shutdown() {
             _foot_locations[i] = quad::config::DEFAULT_STANCE[i] + Eigen::Vector3d(0.0, 0.0, _height);
         }
         _joint_angles = body_inverse_kinematics(_foot_locations);
+    } else {
+        _is_immobile = true;
     }
 
     return Mode::SHUTDOWN;
@@ -319,13 +321,17 @@ void QuadControl::correct_joint_signs(LegJointAngles& angles, std::size_t leg_in
     //
     // For right side legs hip pitch and knee pitch must go opposite direction than
     // left side legs
-    if (leg_index == common::FR) {
+    if (leg_index == common::FL) {
         angles.hip_roll   = -angles.hip_roll;
+
+    } else if (leg_index == common::FR) {
         angles.hip_pitch  = -angles.hip_pitch;
         angles.knee_pitch = -angles.knee_pitch;
 
-    } else if (leg_index == common::BR) {
+    } else if (leg_index == common::BL) {
         angles.hip_roll   = -angles.hip_roll;
+
+    } else if (leg_index == common::BR) {
         angles.hip_pitch  = -angles.hip_pitch;
         angles.knee_pitch = -angles.knee_pitch;
     }

@@ -36,7 +36,7 @@ class GamepadData(ctypes.Structure):
 def main():
     # --- UDP Configuration ---
     UDP_IP = "0.0.0.0"  # Listen on all available network interfaces
-    UDP_PORT = 3006
+    UDP_PORT = 3007
     struct_size = ctypes.sizeof(GamepadData)
 
     # --- iceoryx2 Node Setup ---
@@ -65,7 +65,7 @@ def main():
     # --- UDP Socket Setup ---
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_IP, UDP_PORT))
-    
+    sock.settimeout(0.5)
     print(f"Listening for UDP packets on port {UDP_PORT} (Expected size: {struct_size} bytes)...")
     print("Bridging UDP data to iceoryx2 IPC. Press Ctrl+C to stop.")
 
@@ -73,10 +73,13 @@ def main():
         while True:
 
             node.wait(iox2.Duration.from_millis(10))
-            # 1. Receive data from the Edge PC over UDP
-            # recvfrom is a blocking call, so the loop naturally paces itself 
-            # to the incoming 100Hz network stream.
-            payload, addr = sock.recvfrom(1024)
+            try:
+                # This will now block only for the duration of your settimeout()
+                payload, addr = sock.recvfrom(1024)
+            except (socket.timeout, TimeoutError):
+                # This is the key: catching the timeout allows the loop to 
+                # continue and check for Ctrl+C/Signals without crashing.
+                continue
             
             # 2. Validate packet size to prevent memory alignment crashes
             if len(payload) == struct_size:
@@ -92,14 +95,10 @@ def main():
                 else:
                     print("Warning: Could not loan shared memory from iceoryx2")
 
-                # 4. Trigger System Events based on controller input
+                # REMOVED KILL_MOTORS (look at control code for that)
                 if data.Start:
                     notifier.notify_with_custom_event_id(
                         to_event_id(SystemLogic.StartMotors))
-
-                if data.Select:
-                        notifier.notify_with_custom_event_id(
-                        to_event_id(SystemLogic.KillMotors))
             else:
                 print(f"Warning: Received packet of {len(payload)} bytes, expected {struct_size}.")
                 

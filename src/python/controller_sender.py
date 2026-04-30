@@ -179,14 +179,11 @@ if __name__ == "__main__":
             else:
                 print("could not loan memory")
             
-            # notifiers
+            # notifiers (REMOVED KILLMOTORS)
             if data.Start:
                 notifier.notify_with_custom_event_id(
                     to_event_id(SystemLogic.StartMotors))
 
-            if data.Select:
-                notifier.notify_with_custom_event_id(
-                    to_event_id(SystemLogic.KillMotors))
 
             prev_data = data
             # debug remove later

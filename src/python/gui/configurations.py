@@ -32,7 +32,14 @@ SPEAKER_TO_MIC_PORT = 3005
 VIDEO_RECORD_PORT = 5001
 AUDIO_RECORD_PORT = 3006
 YOLO_WEIGHTS = 'yolov8n.pt'
+VOLT_WARNING = 22.2
+VOLT_CRITICAL = 21
+POWER_LIMIT_W = 300.0
+LIDAR_UDP_PORT = 6000
+LIDAR_MAX_RANGE_FT = 164.0
+LIDAR_SAMPLES = 300
+SCAN_FOV_DEG = 120.0
 
 # Robot Hardware Info
 ROBOT_IP = "100.81.189.79"
-ROBOT_EXEC = "/home/quadconn/gui_branch/quadconn/build/camera_stream"
+ROBOT_EXEC = "/home/quadconn/quadconn/scripts/bash/run_camera.sh"

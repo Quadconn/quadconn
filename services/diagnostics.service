@@ -1,0 +1,12 @@
+# FINISHED
+[Unit]
+Description=Runs executable responsible for sending motor diagnostics via UDP
+# This ties the lifecycle of this service to the target
+After=motor_interface.service
+
+[Service]
+Type=simple
+ExecStart=/home/quadconn/quadconn/scripts/bash/run_udp_gamepad_receiver.sh
+WorkingDirectory=/home/quadconn/quadconn/
+Restart=on-failure
+User=quadconn

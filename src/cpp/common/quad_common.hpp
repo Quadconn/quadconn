@@ -17,16 +17,17 @@ namespace quad::common {
     // Input to output scaling factor
     inline constexpr double INPUT_TO_OUTPUT_SCALE = 9.0;
 
-    inline constexpr double FL_KNEE_0      = -4.1366; // CAN-ID 4
-    inline constexpr double FL_HIP_PITCH_0 =  2.3222; // CAN-ID 3
-    inline constexpr double FL_HIP_ROLL_0  =  2.6353; // CAN-ID 8
-    inline constexpr double FR_KNEE_0      =  4.2143; // CAN-ID 2
-    inline constexpr double FR_HIP_PITCH_0 = -2.3201; // CAN-ID 12
-    inline constexpr double FR_HIP_ROLL_0  =  2.6567; // CAN-ID 5
-    inline constexpr double BL_KNEE_0      =  4.1771; // CAN-ID 11
-    inline constexpr double BL_HIP_PITCH_0 = -2.2667; // CAN-ID 1
-    inline constexpr double BL_HIP_ROLL_0  =  2.6512; // CAN-ID 6
-    inline constexpr double BR_KNEE_0      = -4.1268; // CAN-ID 10
-    inline constexpr double BR_HIP_PITCH_0 =  2.2412; // CAN-ID 9
-    inline constexpr double BR_HIP_ROLL_0  =  2.5879; // CAN-ID 7
+    inline constexpr double FL_KNEE_0      = -4.1062; // CAN-ID 4
+    inline constexpr double FL_HIP_PITCH_0 =  2.2899; // CAN-ID 9
+    inline constexpr double FL_HIP_ROLL_0  = -2.6163; // CAN-ID 5
+    inline constexpr double FR_KNEE_0      =  4.0685; // CAN-ID 3 
+    inline constexpr double FR_HIP_PITCH_0 = -2.2288; // CAN-ID 2
+    inline constexpr double FR_HIP_ROLL_0  = -2.6619; // CAN-ID 7
+    inline constexpr double BL_KNEE_0      =  4.0120; // CAN-ID 1
+    inline constexpr double BL_HIP_PITCH_0 = -2.3069; // CAN-ID 11
+    inline constexpr double BL_HIP_ROLL_0  =  2.6256; // CAN-ID 8
+    inline constexpr double BR_KNEE_0      = -4.0993; // CAN-ID 12
+    inline constexpr double BR_HIP_PITCH_0 =  2.2881; // CAN-ID 10
+    inline constexpr double BR_HIP_ROLL_0  = -2.6750; // CAN-ID 6
 };
+

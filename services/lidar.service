@@ -7,11 +7,13 @@ After=network.target
 [Service]
 Type=simple
 # Always use absolute paths for both the interpreter and the script
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/quadconn/quadconn/scripts/bash/run_lidar.sh
 WorkingDirectory=/home/quadconn/quadconn/
 Restart=on-failure
 User=quadconn
+KillSignal=SIGINT
 
 [Install]
 # This tells systemd to start this service when the target is started
-WantedBy=quadconn_startup.target  
+WantedBy=quadconn_startup.target

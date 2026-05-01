@@ -102,12 +102,14 @@ class Particle:
     def updateEstimatedPose(self, currentRawReading, motion):
         import math
         speed = motion['speed']
+        strafe = motion.get('strafe', 0.0)
         orientation = motion['orientation']
         dt = motion['dt']
 
         # Calculate displacement based on speed and heading
-        dx = speed * math.cos(orientation) * dt
-        dy = speed * math.sin(orientation) * dt
+        dx = speed  * math.cos(orientation) * dt - strafe * math.sin(orientation) * dt
+        dy = speed  * math.sin(orientation) * dt + strafe * math.cos(orientation) * dt
+
 
         estimatedReading = {
             'x':     self.prevMatchedReading['x'] + dx,

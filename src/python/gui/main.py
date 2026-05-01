@@ -39,19 +39,19 @@ class LidarMapWidget(QWidget):
         # Initialize the widget with a neutral grey 'blank' map (0.5 probability).
         # This prevents a black flicker or empty box while waiting for the first SLAM packet.
         blank = np.full((201, 201), 0.5)
-        self.update_map(blank, 0, 0, 0)
+        self.update_map(blank, 0, 0, 0, False)
 
-    def update_map(self, array, x, y, theta):
+    def update_map(self, array, x, y, theta, human_detected):
         """
         Receives processed data from the LidarSLAMWorker and prepares it for rendering.
         """
         # 1. Conversion: Maps occupancy probabilities (0.0 to 1.0) to grayscale pixel values (0 to 255).
-        gray_data = (array * 255).astype(np.uint8)
-        h, w = gray_data.shape
+        self._map_buffer = (array * 255).astype(np.uint8)  # one array, stored on self
+        h, w = self._map_buffer.shape
         
         # 2. Memory Management: Wrap the NumPy buffer into a QImage for fast GPU rendering.
         # Using Format_Grayscale8 as it is the most memory-efficient for occupancy grids.
-        self.map_image = QImage(gray_data.data, w, h, w, QImage.Format.Format_Grayscale8)
+        self.map_image = QImage(self._map_buffer.data, w, h, w, QImage.Format.Format_Grayscale8)
         
         # 3. Synchronize the robot's estimated position and heading
         self.robot_pos = (x, y, theta)
@@ -75,7 +75,11 @@ class LidarMapWidget(QWidget):
         painter.drawImage(target_rect, self.map_image)
 
         # Coordinate Transformation: Convert 'Feet' coordinates to 'Pixel' coordinates
-        min_x, max_x, min_y, max_y = self.map_limits
+        view_half = 50.0
+        min_x = self.robot_pos[0] - view_half
+        max_x = self.robot_pos[0] + view_half
+        min_y = self.robot_pos[1] - view_half
+        max_y = self.robot_pos[1] + view_half
         
         # Calculate X pixel: (Relative position in feet / Total feet range) * Widget Width
         px = (self.robot_pos[0] - min_x) / (max_x - min_x) * self.width()
@@ -320,7 +324,7 @@ class QuadconnDashboard(QWidget):
             
             # Create a "neutral gray" blank map (201x201 based on your 100ft/0.5 resolution)
             blank_map = np.full((201, 201), 0.5) 
-            self.lidar_map.update_map(blank_map, 0, 0, 0)
+            self.lidar_map.update_map(blank_map, 0, 0, 0, False)
             print("RECON MAP RESET: SLAM Particle grids cleared.")
         else:
             print("Reset failed: SLAM engine not initialized yet.")
@@ -493,7 +497,7 @@ class QuadconnDashboard(QWidget):
         # We use 'vx' directly for forward/backward velocity. This is signed,
         # meaning positive values move the robot forward and negative values move it backward.
         vx = state.get("vx", 0.0)
-    
+        vy = state.get("vy", 0.0)
         # Commanded yaw rate defines how fast the robot's heading is changing (radians/second)
         commanded_yaw = state.get("yaw_rate", 0.0)
 
@@ -502,7 +506,8 @@ class QuadconnDashboard(QWidget):
             # This method call serves as the thread-safe 'mailbox' between the UI and SLAM engine
             # We also pass the human detection status from the YOLO video thread
             self.lidar_thread.update_robot_state(
-                speed_mps=vx, 
+                speed_mps=vx,
+                strafe_mps=vy,
                 yaw_rate=commanded_yaw, 
                 human_present=self.video_thread.is_person_in_view()
             )

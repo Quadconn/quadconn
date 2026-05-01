@@ -104,7 +104,7 @@ from OccupancyGrid import OccupancyGrid
 
 class LidarSLAMWorker(QThread):
     # Signal emitted to main.py to update the GUI with the processed map and robot coordinates
-    map_updated = pyqtSignal(np.ndarray, float, float, float)
+    map_updated = pyqtSignal(np.ndarray, float, float, float, bool)
 
     def __init__(self):
         super().__init__()
@@ -116,6 +116,7 @@ class LidarSLAMWorker(QThread):
         
         # Internal state variables updated by the controller
         self._robot_speed_mps = 0.0     # Signed linear velocity from sticks (m/s)
+        self._robot_strafe_mps = 0.0     # Y position coordinate
         self._robot_yaw_rate = 0.0      # Angular velocity from sticks (rad/s)
         self._human_present = False     # YOLO detection flag
         
@@ -179,6 +180,7 @@ class LidarSLAMWorker(QThread):
                 with self._state_lock:
                     # Convert m/s from controller to feet/s for the SLAM coordinate system
                     speed_fps = self._robot_speed_mps * 3.28084 
+                    strafe_fps = self._robot_strafe_mps * 3.28084
                     current_yaw_rate = self._robot_yaw_rate
 
                 # Update absolute heading using Euler integration
@@ -186,11 +188,12 @@ class LidarSLAMWorker(QThread):
                 self.integrated_theta += (current_yaw_rate * dt)
 
                 # Determine if the robot is currently in motion (linear or angular)
-                isMoving = abs(speed_fps) > 1e-3 or abs(current_yaw_rate) > 1e-3
-                
+                isMoving = abs(speed_fps) > 1e-3 or abs(strafe_fps) > 1e-3 or abs(current_yaw_rate) > 1e-3
+
                 # Construct motion dictionary to guide the Particle Filter's prediction step
                 motion = {
                     'speed': speed_fps, 
+                    'strafe': strafe_fps,
                     'orientation': self.integrated_theta, # Pass absolute heading
                     'dt': dt
                 } if isMoving else None
@@ -235,18 +238,22 @@ class LidarSLAMWorker(QThread):
                     ogMap = np.flipud(1.0 - ratio)
                     
                     # Send the processed map and robot pose back to the main GUI thread
-                    self.map_updated.emit(ogMap, curr_x, curr_y, curr_theta)
+                    with self._state_lock:
+                        human = self._human_present
+                    self.map_updated.emit(ogMap, curr_x, curr_y, curr_theta, human)
 
             except socket.timeout:
+                last_scan_time = None
                 continue
             except Exception as e:
                 print(f"SLAM Error: {e}")
 
-    def update_robot_state(self, speed_mps, yaw_rate, human_present):
+    def update_robot_state(self, speed_mps, strafe_mps, yaw_rate, human_present):
         # Thread-safe method called by main.py to pass controller data to the SLAM engine.
         # Acts as the 'Mailbox' for cross-thread communication.
         with self._state_lock:
             self._robot_speed_mps = float(speed_mps)
+            self._robot_strafe_mps = float(strafe_mps)
             self._robot_yaw_rate = float(yaw_rate)
             self._human_present = bool(human_present)
 

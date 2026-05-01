@@ -25,7 +25,7 @@ namespace quad::common {
     inline constexpr double FR_HIP_ROLL_0  = -2.6619; // CAN-ID 7
     inline constexpr double BL_KNEE_0      =  4.0120; // CAN-ID 1
     inline constexpr double BL_HIP_PITCH_0 = -2.3069; // CAN-ID 11
-    inline constexpr double BL_HIP_ROLL_0  =  2.6256; // CAN-ID 8
+    inline constexpr double BL_HIP_ROLL_0  = -2.6256; // CAN-ID 8
     inline constexpr double BR_KNEE_0      = -4.0993; // CAN-ID 12
     inline constexpr double BR_HIP_PITCH_0 =  2.2881; // CAN-ID 10
     inline constexpr double BR_HIP_ROLL_0  = -2.6750; // CAN-ID 6
